@@ -1,109 +1,239 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { FaArrowLeft, FaGoogle } from "react-icons/fa6";
+import {
+  FaArrowLeft,
+  FaGoogle,
+  FaEnvelope,
+  FaLock,
+  FaEye,
+  FaEyeSlash,
+  FaShieldHeart,
+} from "react-icons/fa6";
 
 export default function Login() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ email: "", password: "", remember: false });
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const [form, setForm] = useState({
+    email: "",
+    password: "",
+    remember: false,
+  });
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // TODO: replace with Express API call — POST /api/auth/login
-    navigate("/dashboard");
+
+    setLoading(true);
+
+    // TODO: Replace with Express API
+    setTimeout(() => {
+      setLoading(false);
+      navigate("/home");
+    }, 1500);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 bg-ink-radial relative">
+    <div className="min-h-screen flex items-center justify-center bg-ink-radial px-6 relative overflow-hidden">
+
+      {/* Background Glow */}
+
+      <div className="absolute w-96 h-96 bg-teal/10 rounded-full blur-[120px] -top-20 -left-20" />
+      <div className="absolute w-96 h-96 bg-blue-500/10 rounded-full blur-[120px] bottom-0 right-0" />
+
+      {/* Back */}
+
       <Link
         to="/"
-        className="absolute top-6 left-6 flex items-center gap-2 text-sm text-muted hover:text-offwhite transition-colors"
+        className="absolute top-8 left-8 flex items-center gap-2 text-muted hover:text-teal transition"
       >
-        <FaArrowLeft /> Back to Home
+        <FaArrowLeft />
+        Back to Home
       </Link>
 
       <motion.div
-        initial={{ opacity: 0, y: 24 }}
+        initial={{ opacity: 0, y: 35 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="glass rounded-2xl p-8 w-full max-w-md shadow-glass"
+        transition={{ duration: 0.6 }}
+        className="glass rounded-3xl p-10 w-full max-w-md shadow-glass border border-teal/20 relative z-10"
       >
-        <div className="mb-8 text-center">
-          <span className="inline-block w-10 h-10 rounded-xl bg-teal-blue-gradient mb-4" />
-          <h1 className="text-2xl font-semibold font-display">Welcome back</h1>
-          <p className="text-sm text-muted mt-1">Log in to continue your analysis history.</p>
+        {/* Logo */}
+
+        <div className="text-center mb-8">
+
+          <div className="w-20 h-20 rounded-full bg-teal-blue-gradient flex items-center justify-center text-3xl text-white mx-auto mb-5">
+            <FaShieldHeart />
+          </div>
+
+          <h1 className="text-3xl font-bold mb-2">
+            Welcome Back
+          </h1>
+
+          <p className="text-muted">
+            Sign in to continue using DERMAINTEL
+          </p>
+
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div>
-            <label className="text-xs text-muted block mb-1.5">Email</label>
-            <input
-              type="email"
-              required
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="you@example.com"
-              className="w-full bg-surface border border-line rounded-lg px-4 py-2.5 text-sm outline-none focus:border-teal/50 transition-colors"
-            />
-          </div>
+        <form onSubmit={handleSubmit} className="space-y-5">
+
+          {/* Email */}
 
           <div>
-            <label className="text-xs text-muted block mb-1.5">Password</label>
-            <input
-              type="password"
-              required
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              placeholder="••••••••"
-              className="w-full bg-surface border border-line rounded-lg px-4 py-2.5 text-sm outline-none focus:border-teal/50 transition-colors"
-            />
+
+            <label className="text-sm text-muted mb-2 block">
+              Email Address
+            </label>
+
+            <div className="relative">
+
+              <FaEnvelope className="absolute left-4 top-1/2 -translate-y-1/2 text-teal" />
+
+              <input
+                type="email"
+                required
+                value={form.email}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    email: e.target.value,
+                  })
+                }
+                placeholder="you@example.com"
+                className="w-full bg-surface border border-line rounded-xl py-3 pl-12 pr-4 outline-none focus:border-teal transition"
+              />
+
+            </div>
+
           </div>
 
-          <div className="flex items-center justify-between text-sm">
+          {/* Password */}
+
+          <div>
+
+            <label className="text-sm text-muted mb-2 block">
+              Password
+            </label>
+
+            <div className="relative">
+
+              <FaLock className="absolute left-4 top-1/2 -translate-y-1/2 text-teal" />
+
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                value={form.password}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    password: e.target.value,
+                  })
+                }
+                placeholder="Enter your password"
+                className="w-full bg-surface border border-line rounded-xl py-3 pl-12 pr-12 outline-none focus:border-teal transition"
+              />
+
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-muted hover:text-teal"
+              >
+                {showPassword ? <FaEyeSlash /> : <FaEye />}
+              </button>
+
+            </div>
+
+          </div>
+
+          {/* Remember */}
+
+          <div className="flex justify-between items-center text-sm">
+
             <label className="flex items-center gap-2 text-muted">
+
               <input
                 type="checkbox"
                 checked={form.remember}
-                onChange={(e) => setForm({ ...form, remember: e.target.checked })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    remember: e.target.checked,
+                  })
+                }
                 className="accent-teal"
               />
-              Remember me
+
+              Remember Me
+
             </label>
-            {/* TODO: wire to Express API — POST /api/auth/forgot-password */}
-            <a href="#" className="text-teal hover:underline">
-              Forgot password?
+
+            <a
+              href="#"
+              className="text-teal hover:underline"
+            >
+              Forgot Password?
             </a>
+
           </div>
+
+          {/* Login */}
 
           <button
             type="submit"
-            className="mt-2 w-full py-2.5 rounded-lg bg-teal-blue-gradient text-ink font-medium hover:shadow-glow transition-shadow"
+            disabled={loading}
+            className="w-full py-3 rounded-xl bg-teal-blue-gradient text-ink font-semibold hover:shadow-glow transition"
           >
-            Log in
+            {loading ? "Signing In..." : "Log In"}
           </button>
 
-          <div className="flex items-center gap-3 my-1">
-            <span className="h-px flex-1 bg-line" />
-            <span className="text-xs text-muted">or</span>
-            <span className="h-px flex-1 bg-line" />
+          {/* Divider */}
+
+          <div className="flex items-center gap-3">
+
+            <span className="flex-1 h-px bg-line"></span>
+
+            <span className="text-xs text-muted">
+              OR
+            </span>
+
+            <span className="flex-1 h-px bg-line"></span>
+
           </div>
 
-          {/* TODO: wire to Express API — GET /api/auth/google (OAuth redirect) */}
+          {/* Google */}
+
           <button
             type="button"
-            className="w-full py-2.5 rounded-lg border border-line flex items-center justify-center gap-2 text-sm hover:border-teal/40 transition-colors"
+            className="w-full py-3 rounded-xl border border-line flex justify-center items-center gap-3 hover:border-teal transition"
           >
-            <FaGoogle /> Continue with Google
+            <FaGoogle />
+
+            Continue with Google
           </button>
+
         </form>
 
-        <p className="text-center text-sm text-muted mt-6">
-          Don't have an account?{" "}
-          <Link to="/register" className="text-teal hover:underline">
-            Register
-          </Link>
-        </p>
+        <div className="text-center mt-8">
+
+          <p className="text-muted">
+
+            Don't have an account?
+
+            <Link
+              to="/register"
+              className="text-teal font-semibold ml-2 hover:underline"
+            >
+              Register
+            </Link>
+
+          </p>
+
+        </div>
+
       </motion.div>
+
     </div>
   );
 }

@@ -8,96 +8,128 @@ export const NAV_LINKS = [
 
 export const FEATURES = [
   {
-    icon: "FaMagnifyingGlass",
-    title: "AI Disease Detection",
-    desc: "A ResNet50-based model reads the uploaded image and flags the most likely skin condition in seconds.",
+    icon: "FaCamera",
+    title: "AI Skin Analysis",
+    desc: "Upload a clear skin image and receive an AI-powered analysis within seconds using advanced deep learning models.",
+  },
+  {
+    icon: "FaBrain",
+    title: "Disease Prediction",
+    desc: "Our ResNet50-based model identifies possible skin conditions and provides confidence scores for every prediction.",
   },
   {
     icon: "FaLayerGroup",
-    title: "Grad-CAM Visualization",
-    desc: "See exactly which regions of the image influenced the prediction, not just a bare percentage.",
+    title: "Grad-CAM Explainability",
+    desc: "Understand why the AI predicted a condition through heatmaps that highlight important skin regions.",
   },
   {
     icon: "FaCloudSun",
-    title: "Environmental Analysis",
-    desc: "UV index, air quality, and local weather are folded into your risk score, not treated as an afterthought.",
+    title: "Environmental Insights",
+    desc: "Weather, UV index, humidity, and air quality are included to generate more personalized skincare guidance.",
   },
   {
-    icon: "FaListCheck",
-    title: "Personalized Recommendations",
-    desc: "Guidance is generated from your specific result and environment, not a generic skincare checklist.",
+    icon: "FaFileMedical",
+    title: "Medical Report",
+    desc: "Receive a detailed report containing disease information, precautions, recommendations, and confidence score.",
   },
   {
-    icon: "FaClockRotateLeft",
+    icon: "FaChartLine",
     title: "Prediction History",
-    desc: "Every scan is saved, so changes in your skin are something you can actually track over time.",
-  },
-  {
-    icon: "FaBolt",
-    title: "Fast Analysis",
-    desc: "Inference runs in the background the moment you upload — no waiting on a full page reload.",
+    desc: "View previous analyses, compare results over time, and monitor improvements in your skin health.",
   },
 ];
 
 export const STEPS = [
-  { step: 1, title: "Upload image", desc: "Drop in a clear photo of the affected skin area." },
-  { step: 2, title: "AI analyzes", desc: "The model runs inference and cross-checks local environmental data." },
-  { step: 3, title: "Prediction generated", desc: "You get a classification with a confidence score and Grad-CAM overlay." },
-  { step: 4, title: "View recommendations", desc: "Personalized, environment-aware next steps are laid out for you." },
+  {
+    step: 1,
+    title: "Prepare Your Image",
+    desc: "Capture a clear, well-lit photo of the affected skin area following the image guidelines.",
+  },
+  {
+    step: 2,
+    title: "Upload Image",
+    desc: "Upload your skin image securely from your device for AI analysis.",
+  },
+  {
+    step: 3,
+    title: "AI Processing",
+    desc: "The AI model analyzes the image, evaluates environmental factors, and generates Grad-CAM visualization.",
+  },
+  {
+    step: 4,
+    title: "View Results",
+    desc: "Receive disease prediction, confidence score, recommendations, and a downloadable medical report.",
+  },
 ];
 
 export const STATS = [
-  { value: "95%+", label: "Validation Accuracy" },
-  { value: "ResNet50", label: "Model Backbone" },
-  { value: "CNN", label: "Architecture Class" },
-  { value: "Real-time", label: "Inference Speed" },
+  {
+    value: "95%+",
+    label: "Prediction Accuracy",
+  },
+  {
+    value: "5+",
+    label: "Skin Conditions",
+  },
+  {
+    value: "24/7",
+    label: "AI Availability",
+  },
+  {
+    value: "<5 sec",
+    label: "Analysis Time",
+  },
 ];
 
 export const TESTIMONIALS = [
   {
     name: "Dr. Anika Rao",
-    role: "Dermatologist",
+    role: "Consultant Dermatologist",
     quote:
-      "The Grad-CAM overlay is what sold me — it shows its work instead of just handing back a label.",
+      "DERMAINTEL combines explainable AI with clinical insights, making predictions easier to understand and trust.",
   },
   {
-    name: "Meera Suresh",
-    role: "Final-year CS Student",
+    name: "Rahul Sharma",
+    role: "Computer Science Student",
     quote:
-      "Watching an actual ResNet50 pipeline turn into a usable product was the best part of studying this space.",
+      "The dashboard, prediction history, and Grad-CAM visualization make the project feel like a real healthcare application.",
   },
   {
     name: "Prof. Devan Iyer",
-    role: "ML Researcher",
+    role: "AI Researcher",
     quote:
-      "Folding environmental signals into the risk score is a small detail that most tools skip entirely.",
+      "Including environmental factors alongside image analysis creates a more intelligent and personalized prediction system.",
   },
 ];
 
 export const FAQS = [
   {
-    q: "Is DERMAINTEL a replacement for a dermatologist?",
-    a: "No. It's an early-detection and awareness aid — always confirm any result with a qualified professional.",
+    q: "Can DERMAINTEL replace a dermatologist?",
+    a: "No. DERMAINTEL is designed as an AI-assisted screening tool. Always consult a qualified dermatologist for medical diagnosis and treatment.",
   },
   {
-    q: "What kind of images work best?",
-    a: "Clear, well-lit, close-up photos of the affected area, taken without heavy filters or obstructions.",
+    q: "Which skin conditions are supported?",
+    a: "The system can identify Acne, Psoriasis, Eczema, Fungal Infection, Healthy Skin, and other conditions supported by the trained model.",
   },
   {
-    q: "How is my environmental data used?",
-    a: "Your location's UV index, air quality, and weather are combined with your result to shape the risk score and recommendations.",
+    q: "What type of image should I upload?",
+    a: "Use a clear, high-resolution, well-lit image of the affected skin without heavy filters or obstructions.",
   },
   {
-    q: "Is my prediction history private?",
-    a: "Yes — history is tied to your account and is not shared or shown to other users.",
+    q: "Is my uploaded data secure?",
+    a: "Yes. Images and prediction history are stored securely and remain associated only with your account.",
+  },
+  {
+    q: "Why are environmental factors considered?",
+    a: "Weather, UV index, humidity, and air quality can influence certain skin conditions. DERMAINTEL uses these factors to generate more personalized recommendations.",
   },
 ];
 
 export const GALLERY_IMAGES = [
-  "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=600&q=60",
-  "https://images.unsplash.com/photo-1584515933487-779824d29309?w=600&q=60",
-  "https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?w=600&q=60",
-  "https://images.unsplash.com/photo-1580281657702-257584239a55?w=600&q=60",
-  "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=600&q=60",
-  "https://images.unsplash.com/photo-1550831107-1553da8c8464?w=600&q=60",
+  "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=600&q=80",
+  "https://images.unsplash.com/photo-1584515933487-779824d29309?w=600&q=80",
+  "https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?w=600&q=80",
+  "https://images.unsplash.com/photo-1580281657702-257584239a55?w=600&q=80",
+  "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=600&q=80",
+  "https://images.unsplash.com/photo-1550831107-1553da8c8464?w=600&q=80",
 ];

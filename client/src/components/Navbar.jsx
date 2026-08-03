@@ -7,8 +7,9 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 12);
+    const onScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", onScroll);
+
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
@@ -17,36 +18,45 @@ export default function Navbar() {
       initial={{ y: -40, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
-        scrolled ? "glass shadow-glass" : "bg-transparent border-b border-transparent"
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        scrolled
+          ? "bg-white shadow-md"
+          : "bg-white/90 backdrop-blur-md"
       }`}
     >
-      <nav className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
-        <Link to="/" className="flex items-center gap-2">
-          <span className="w-8 h-8 rounded-lg bg-teal-blue-gradient" />
-          <span className="font-display font-semibold text-lg tracking-tight">DERMAINTEL</span>
+      <nav className="max-w-7xl mx-auto flex items-center justify-between px-8 py-4">
+        <Link to="/" className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600"></div>
+
+          <span className="text-2xl font-bold text-slate-800">
+            DERMAINTEL
+          </span>
         </Link>
 
-        <ul className="hidden md:flex items-center gap-8 text-sm text-muted">
+        <ul className="hidden md:flex items-center gap-10 text-gray-700 font-medium">
           {NAV_LINKS.map((link) => (
             <li key={link.label}>
-              <a href={link.to} className="hover:text-offwhite transition-colors">
+              <a
+                href={link.to}
+                className="hover:text-cyan-600 transition"
+              >
                 {link.label}
               </a>
             </li>
           ))}
         </ul>
 
-        <div className="flex items-center gap-3">
+        <div className="flex gap-3">
           <Link
             to="/login"
-            className="hidden sm:inline-block px-4 py-2 text-sm rounded-lg text-offwhite/90 hover:text-offwhite border border-line hover:border-teal/40 transition-colors"
+            className="px-5 py-2 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-100 transition"
           >
             Log in
           </Link>
+
           <Link
             to="/register"
-            className="px-4 py-2 text-sm rounded-lg bg-teal-blue-gradient text-ink font-medium hover:shadow-glow transition-shadow"
+            className="px-5 py-2 rounded-xl bg-cyan-600 text-white hover:bg-cyan-700 transition"
           >
             Register
           </Link>

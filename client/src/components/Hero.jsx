@@ -3,45 +3,36 @@ import { Link } from "react-router-dom";
 import ScanFrame from "./ScanFrame.jsx";
 
 const fadeUp = {
-  hidden: { opacity: 0, y: 24 },
+  hidden: { opacity: 0, y: 30 },
   show: (i = 0) => ({
     opacity: 1,
     y: 0,
-    transition: { duration: 0.6, delay: i * 0.12, ease: "easeOut" },
+    transition: {
+      duration: 0.6,
+      delay: i * 0.15,
+      ease: "easeOut",
+    },
   }),
 };
 
 export default function Hero() {
   return (
-    <section id="home" className="relative pt-36 pb-24 px-6 overflow-hidden bg-ink-radial">
-      {/* ambient particles */}
-      <div className="pointer-events-none absolute inset-0">
-        {Array.from({ length: 18 }).map((_, i) => (
-          <span
-            key={i}
-            className="absolute rounded-full bg-teal/30"
-            style={{
-              width: `${2 + (i % 3)}px`,
-              height: `${2 + (i % 3)}px`,
-              top: `${(i * 37) % 100}%`,
-              left: `${(i * 53) % 100}%`,
-              animation: `pulse ${3 + (i % 4)}s ease-in-out infinite`,
-              animationDelay: `${i * 0.2}s`,
-            }}
-          />
-        ))}
-      </div>
+    <section
+      id="home"
+      className="relative bg-gradient-to-b from-white via-slate-50 to-gray-100 pt-32 pb-24 px-6"
+    >
+      <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
 
-      <div className="relative max-w-7xl mx-auto grid md:grid-cols-2 gap-16 items-center">
+        {/* Left Content */}
         <div>
           <motion.p
             variants={fadeUp}
             initial="hidden"
             animate="show"
             custom={0}
-            className="font-mono text-xs tracking-widest text-teal uppercase mb-4"
+            className="uppercase tracking-[5px] text-cyan-600 text-sm font-semibold"
           >
-            AI-assisted dermatology
+            AI Assisted Dermatology
           </motion.p>
 
           <motion.h1
@@ -49,31 +40,33 @@ export default function Hero() {
             initial="hidden"
             animate="show"
             custom={1}
-            className="text-5xl sm:text-6xl font-semibold tracking-tight leading-[1.05]"
+            className="mt-5 text-5xl lg:text-6xl font-bold leading-tight text-slate-900"
           >
-            <span className="text-gradient">DERMAINTEL</span>
+            DERMAINTEL
           </motion.h1>
 
-          <motion.p
+          <motion.h2
             variants={fadeUp}
             initial="hidden"
             animate="show"
             custom={2}
-            className="mt-3 text-xl text-offwhite/90 font-display"
+            className="mt-5 text-2xl font-semibold text-slate-700"
           >
             AI-Powered Skin Disease Detection Platform
-          </motion.p>
+          </motion.h2>
 
           <motion.p
             variants={fadeUp}
             initial="hidden"
             animate="show"
             custom={3}
-            className="mt-6 text-muted leading-relaxed max-w-lg"
+            className="mt-7 text-lg leading-8 text-gray-600 max-w-xl"
           >
-            Upload a photo of the affected skin area. The model analyzes it, returns a
-            prediction with a confidence score, and pairs it with environmental
-            recommendations — built to support earlier detection, not replace a diagnosis.
+            Upload a clear photo of the affected skin area and receive an
+            AI-powered prediction with confidence score, environmental
+            recommendations, and clinical insights to support early detection.
+            DERMAINTEL is designed to assist healthcare awareness and is not a
+            replacement for professional medical diagnosis.
           </motion.p>
 
           <motion.div
@@ -81,33 +74,65 @@ export default function Hero() {
             initial="hidden"
             animate="show"
             custom={4}
-            className="mt-8 flex flex-wrap gap-4"
+            className="mt-10 flex gap-5"
           >
             <Link
               to="/register"
-              className="px-6 py-3 rounded-xl bg-teal-blue-gradient text-ink font-medium hover:shadow-glow transition-shadow"
+              className="px-7 py-3 rounded-xl bg-cyan-600 text-white font-semibold shadow-lg hover:bg-cyan-700 transition duration-300"
             >
               Get Started
             </Link>
+
             <Link
               to="/login"
-              className="px-6 py-3 rounded-xl border border-line hover:border-teal/40 transition-colors"
+              className="px-7 py-3 rounded-xl border border-gray-300 text-slate-700 font-semibold hover:bg-gray-100 transition duration-300"
             >
               Login
             </Link>
           </motion.div>
+
+          {/* Statistics */}
+          <motion.div
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            custom={5}
+            className="grid grid-cols-3 gap-6 mt-16"
+          >
+            <div>
+              <h3 className="text-3xl font-bold text-cyan-600">95%</h3>
+              <p className="text-gray-500 mt-2 text-sm">
+                Prediction Accuracy
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-3xl font-bold text-cyan-600">5+</h3>
+              <p className="text-gray-500 mt-2 text-sm">
+                Skin Diseases
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-3xl font-bold text-cyan-600">24/7</h3>
+              <p className="text-gray-500 mt-2 text-sm">
+                AI Availability
+              </p>
+            </div>
+          </motion.div>
         </div>
 
+        {/* Right Image */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.94 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.7, delay: 0.2 }}
+          initial={{ opacity: 0, x: 40 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.8 }}
         >
           <ScanFrame>
             <img
-              src="https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?w=900&q=70"
-              alt="Dermatology scan illustration"
-              className="w-full h-[420px] object-cover"
+              src="https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=900&q=80"
+              alt="AI Dermatology"
+              className="w-full h-[500px] object-cover rounded-2xl"
             />
           </ScanFrame>
         </motion.div>

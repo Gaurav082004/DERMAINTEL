@@ -1,21 +1,81 @@
 import { motion } from "framer-motion";
-import { FaQuoteLeft } from "react-icons/fa6";
+import {
+  FaQuoteLeft,
+  FaStar,
+  FaUserDoctor,
+  FaUserGraduate,
+  FaLaptopCode,
+} from "react-icons/fa6";
 
-export default function Testimonial({ name, role, quote, index = 0 }) {
+export default function Testimonial({
+  name,
+  role,
+  quote,
+  index = 0,
+}) {
+  const icons = [
+    <FaUserDoctor />,
+    <FaUserGraduate />,
+    <FaLaptopCode />,
+  ];
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 40 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.3 }}
-      transition={{ duration: 0.5, delay: index * 0.1 }}
-      className="glass rounded-2xl p-6 flex flex-col gap-4"
+      viewport={{ once: true }}
+      transition={{
+        duration: 0.5,
+        delay: index * 0.15,
+      }}
+      whileHover={{
+        y: -8,
+        scale: 1.02,
+      }}
+      className="glass rounded-3xl border border-teal/20 p-8 flex flex-col h-full hover:border-teal transition-all duration-300"
     >
-      <FaQuoteLeft className="text-teal/50 text-xl" />
-      <p className="text-sm text-offwhite/90 leading-relaxed">{quote}</p>
-      <div className="mt-auto pt-2 border-t border-line">
-        <p className="font-medium text-sm">{name}</p>
-        <p className="text-xs text-muted">{role}</p>
+      {/* Top */}
+
+      <div className="flex justify-between items-center mb-6">
+
+        <div className="w-16 h-16 rounded-full bg-teal-blue-gradient flex items-center justify-center text-2xl text-white shadow-glow">
+          {icons[index] || <FaUserDoctor />}
+        </div>
+
+        <FaQuoteLeft className="text-4xl text-teal/30" />
+
       </div>
+
+      {/* Rating */}
+
+      <div className="flex gap-1 mb-5 text-yellow-400">
+        <FaStar />
+        <FaStar />
+        <FaStar />
+        <FaStar />
+        <FaStar />
+      </div>
+
+      {/* Review */}
+
+      <p className="text-muted leading-8 italic mb-8 flex-grow">
+        "{quote}"
+      </p>
+
+      {/* User */}
+
+      <div className="border-t border-line pt-5">
+
+        <h3 className="text-lg font-semibold">
+          {name}
+        </h3>
+
+        <p className="text-teal text-sm mt-1">
+          {role}
+        </p>
+
+      </div>
+
     </motion.div>
   );
 }
