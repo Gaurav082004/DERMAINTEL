@@ -1,0 +1,32 @@
+.env-card__note {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  margin: -8px 0 16px;
+}
+
+.env-card__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.env-card__item {
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.env-card__label {
+  font-size: 12px;
+  color: var(--ink-faint);
+  font-weight: 500;
+}
+
+.env-card__value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}

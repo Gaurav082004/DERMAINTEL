@@ -279,3 +279,68 @@ def validate_configuration() -> dict:
         "configuration_valid": len(errors) == 0,
         "errors": errors,
     }
+
+"""
+DERMAINTEL — config.py additions for feature-space OOD detection
+====================================================================
+
+I don't have the current contents of your config.py, so rather than
+overwrite it, this file contains ONLY the new constants the redesigned
+ood_checker.py needs. Copy/merge this block into your existing config.py.
+
+Every threshold used by ood_checker.py and calibrate_ood.py is defined
+here — nothing is hardcoded in the logic modules.
+"""
+
+import os
+
+# ---------------------------------------------------------------------------
+# Feature-space dimensionality
+# ---------------------------------------------------------------------------
+# Must match the output dimensionality of cnn_engine.extract_features().
+FEATURE_DIM = 256
+
+# ---------------------------------------------------------------------------
+# Mahalanobis OOD detector (primary signal)
+# ---------------------------------------------------------------------------
+# Flag an input as OOD when its Mahalanobis distance from the calibrated
+# in-distribution feature centroid exceeds this value.
+#
+# THIS DEFAULT IS A PLACEHOLDER. It must be selected experimentally against
+# a held-out validation set of in-distribution images and a representative
+# set of non-skin / OOD images — see the "threshold selection" explanation
+# below. Do not ship this default without calibrating it for your data.
+MAHALANOBIS_THRESHOLD = 30.0
+
+# Diagonal regularization (Tikhonov / ridge term) added to the covariance
+# matrix before inversion. 256-D feature covariance estimated from a
+# training set can be ill-conditioned or singular (e.g. if N_samples is
+# close to or below FEATURE_DIM, or features are collinear). This keeps
+# the matrix invertible without materially distorting well-conditioned
+# covariances.
+COVARIANCE_REGULARIZATION = 1e-6
+
+# ---------------------------------------------------------------------------
+# Softmax-based signals (secondary / optional, kept for backward
+# compatibility with any code still calling the old checks)
+# ---------------------------------------------------------------------------
+MAXPROB_THRESHOLD = 0.60
+ENTROPY_THRESHOLD = 1.2
+
+# ---------------------------------------------------------------------------
+# Calibration statistics storage
+# ---------------------------------------------------------------------------
+# Where calibrate_ood.py writes, and ood_checker.py reads, the calibrated
+# mean / covariance / inverse-covariance of the in-distribution feature
+# space.
+OOD_STATS_PATH = os.path.join("models", "ood_feature_statistics.npz")
+
+# ---------------------------------------------------------------------------
+# Calibration run parameters (used by calibrate_ood.py)
+# ---------------------------------------------------------------------------
+# Path to the training image directory used to build the calibration set.
+# Adjust to match your actual dataset layout.
+TRAINING_DATA_DIR = os.path.join("data", "train")
+
+# How often calibrate_ood.py logs progress (every N images).
+CALIBRATION_LOG_INTERVAL = 50
