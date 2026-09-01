@@ -26,10 +26,16 @@ const predictionSchema = new mongoose.Schema(
     severityScore: Number,
     tier: String,
     recommendation: mongoose.Schema.Types.Mixed,
-    gradcam: String,
+    gradcam: mongoose.Schema.Types.Mixed,
+    ood: mongoose.Schema.Types.Mixed,
+    ttaApplied: Boolean,
+    processingTimeMs: Number,
   },
   { timestamps: { createdAt: true, updatedAt: false } }
 );
+
+// Recent-history reads are always sorted by createdAt, so index it.
+predictionSchema.index({ createdAt: -1 });
 
 const Prediction = mongoose.model('Prediction', predictionSchema);
 
