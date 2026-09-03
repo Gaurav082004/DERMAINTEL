@@ -6,3 +6,5 @@ Pillow==11.3.0
 opencv-python-headless==4.13.0.92
 scikit-learn==1.8.0
 joblib==1.5.3
+huggingface_hub
+gunicorn
