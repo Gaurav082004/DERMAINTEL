@@ -16,6 +16,7 @@ modules in the exact order required:
     config.validate_paths()      -> startup artifact check
     src.preprocessor.preprocess  -> image preprocessing
     src.cnn_engine.predict       -> CNN classification (+ OOD + TTA)
+    src.hybrid.predict           -> hybrid CNN/AI final classification
     src.cnn_engine.extract_features -> 256-d feature vector
     src.mlp_engine.predict_risk  -> multimodal risk score
     src.risk_mapper.score_to_tier / get_recommendations
@@ -40,7 +41,7 @@ from flask import Flask, jsonify, request
 from PIL import Image
 
 from config import validate_paths
-from src import cnn_engine, mlp_engine, preprocessor, risk_mapper
+from src import cnn_engine, hybrid, mlp_engine, preprocessor, risk_mapper
 
 # Configure logging so the INFO-level events required by this module
 # (startup, warm-up, request lifecycle, OOD rejections, timing, etc.)
@@ -315,14 +316,16 @@ def predict_endpoint() -> Any:
         4. If the CNN's OOD check rejects the image, return
            immediately (HTTP 400) without running feature extraction
            or the MLP.
-        5. Extract the 256-d CNN feature vector.
-        6. Build the environmental variable vector in fixed order.
-        7. Run multimodal MLP risk prediction.
-        8. Map the risk score to a risk tier.
-        9. Look up recommendations for the (disease, tier) pair.
-        10. Generate a Grad-CAM overlay (best-effort; failures do not
+        5. Run hybrid CNN/AI classification (``src.hybrid.predict``)
+           to obtain the final condition and confidence.
+        6. Extract the 256-d CNN feature vector.
+        7. Build the environmental variable vector in fixed order.
+        8. Run multimodal MLP risk prediction.
+        9. Map the risk score to a risk tier.
+        10. Look up recommendations for the (final condition, tier) pair.
+        11. Generate a Grad-CAM overlay (best-effort; failures do not
             fail the request).
-        11. Return the final structured JSON response.
+        12. Return the final structured JSON response.
 
     Returns:
         Flask response: HTTP 200 with the full structured prediction
@@ -356,7 +359,12 @@ def predict_endpoint() -> Any:
         model_input = processed["model_input"]
 
         # --- Step 3: CNN prediction (includes OOD check + TTA) ---
+        cnn_start = time.perf_counter()
+
         prediction = cnn_engine.predict(model_input)
+
+        cnn_time_ms = (time.perf_counter() - cnn_start) * 1000
+        logger.info("CNN prediction time: %.2f ms", cnn_time_ms)
 
         # --- Step 4: OOD gate -- stop immediately if rejected ---
         if prediction["ood"]["is_ood"]:
@@ -375,6 +383,19 @@ def predict_endpoint() -> Any:
                 400,
             )
 
+       # --- Step 4b: hybrid CNN/AI classification -> final condition ---
+        hybrid_start = time.perf_counter()
+
+        hybrid_result = hybrid.predict(
+            image_bytes, prediction, uploaded_file.content_type
+        )
+
+        hybrid_time_ms = (time.perf_counter() - hybrid_start) * 1000
+        logger.info("Hybrid prediction time: %.2f ms", hybrid_time_ms)
+
+        final_condition = hybrid_result["condition"]
+        final_confidence = hybrid_result["confidence"]
+
         # --- Step 5: feature extraction ---
         cnn_features = cnn_engine.extract_features(model_input)
 
@@ -389,7 +410,7 @@ def predict_endpoint() -> Any:
 
         # --- Step 7: multimodal risk prediction ---
         risk_score = mlp_engine.predict_risk(
-            cnn_features, env_vector, prediction["predicted_label"]
+            cnn_features, env_vector, final_condition
         )
 
         # --- Step 8: risk tier ---
@@ -397,11 +418,13 @@ def predict_endpoint() -> Any:
 
         # --- Step 9: recommendations ---
         recommendations = risk_mapper.get_recommendations(
-            prediction["predicted_label"], risk_tier
+            final_condition, risk_tier
         )
 
         # --- Step 10: Grad-CAM (best-effort, never fails the request) ---
         gradcam_data_uri: Optional[str] = None
+        gradcam_start = time.perf_counter()
+
         try:
             overlay = cnn_engine.get_gradcam(
                 model_input, original_rgb, prediction["predicted_index"]
@@ -413,14 +436,20 @@ def predict_endpoint() -> Any:
             )
             gradcam_data_uri = None
 
+        gradcam_time_ms = (time.perf_counter() - gradcam_start) * 1000
+        logger.info("Grad-CAM time: %.2f ms", gradcam_time_ms)
+
+        # --- Step 11: processing time ---
+        processing_time_ms = int((time.perf_counter() - start_time) * 1000)
+
         # --- Step 11: processing time ---
         processing_time_ms = int((time.perf_counter() - start_time) * 1000)
 
         response_body: Dict[str, Any] = {
             "prediction": {
-                "class": prediction["predicted_label"],
+                "class": final_condition,
                 "class_index": prediction["predicted_index"],
-                "confidence": prediction["confidence"],
+                "confidence": final_confidence,
             },
             "risk": {
                 "score": risk_score,
