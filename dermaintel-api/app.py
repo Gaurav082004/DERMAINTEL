@@ -366,23 +366,6 @@ def predict_endpoint() -> Any:
         cnn_time_ms = (time.perf_counter() - cnn_start) * 1000
         logger.info("CNN prediction time: %.2f ms", cnn_time_ms)
 
-        # --- Step 4: OOD gate -- stop immediately if rejected ---
-        if prediction["ood"]["is_ood"]:
-            logger.info(
-                "Prediction rejected by OOD detector: %s", prediction["ood"]
-            )
-            return (
-                jsonify(
-                    to_python(
-                        {
-                            "error": "Image rejected by OOD detector",
-                            "ood": prediction["ood"],
-                        }
-                    )
-                ),
-                400,
-            )
-
        # --- Step 4b: hybrid CNN/AI classification -> final condition ---
         hybrid_start = time.perf_counter()
 
@@ -442,9 +425,6 @@ def predict_endpoint() -> Any:
         # --- Step 11: processing time ---
         processing_time_ms = int((time.perf_counter() - start_time) * 1000)
 
-        # --- Step 11: processing time ---
-        processing_time_ms = int((time.perf_counter() - start_time) * 1000)
-
         response_body: Dict[str, Any] = {
             "prediction": {
                 "class": final_condition,
@@ -457,7 +437,6 @@ def predict_endpoint() -> Any:
             },
             "recommendations": recommendations,
             "gradcam": gradcam_data_uri,
-            "ood": prediction["ood"],
             "tta_applied": prediction["tta_applied"],
             "processing_time_ms": processing_time_ms,
         }

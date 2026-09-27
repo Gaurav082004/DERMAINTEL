@@ -14,7 +14,7 @@ const db = require('./database');
 
 const PORT = process.env.PORT || 5001;
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ DermaIntel Express backend running on http://localhost:${PORT}`);
   console.log(`➡️  Forwarding ML requests to: ${process.env.FLASK_URL || 'http://127.0.0.1:5000'}`);
 });
