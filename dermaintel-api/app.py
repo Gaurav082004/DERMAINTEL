@@ -74,6 +74,17 @@ _REQUIRED_ENV_FIELDS: Tuple[str, ...] = (
     "stress_penalty",
 )
 
+# The "stress_penalty" form field carries the frontend's raw 1-10 stress
+# slider value, NOT an already-converted model input. The multimodal MLP
+# was trained on Stress_Penalty as exactly one of {0, 2, 3} (Low/Medium/
+# High -- see generate_synthetic_metadata.py's STRESS_VALUE_MAP); passing
+# the raw 1-10 value straight through sends the model massively outside
+# anything it was trained on and produces nonsensical risk scores (e.g.
+# 200+ out of 100). This bucket boundary set is the single source of
+# truth for that conversion -- see _stress_slider_to_penalty() below.
+_STRESS_SLIDER_MIN = 1
+_STRESS_SLIDER_MAX = 10
+
 
 # =====================================================================
 # STARTUP VALIDATION
@@ -238,12 +249,50 @@ def _validate_image_upload(uploaded_file: Any) -> Optional[Tuple[Dict[str, str],
     return None
 
 
+def _stress_slider_to_penalty(stress_slider: float) -> int:
+    """
+    Convert the frontend's 1-10 stress slider into the Stress_Penalty
+    value the multimodal MLP was actually trained on: exactly one of
+    {0, 2, 3} (Low/Medium/High -- see generate_synthetic_metadata.py's
+    STRESS_VALUE_MAP). The model never saw a continuous stress value
+    during training, so this buckets rather than linearly rescales.
+
+    Bucketing (adjust only if the frontend's slider labels promise a
+    different split):
+        1-3  -> 0 (Low)
+        4-7  -> 2 (Medium)
+        8-10 -> 3 (High)
+
+    Args:
+        stress_slider: The raw slider value, expected in [1, 10].
+            Non-integer values are rounded to the nearest integer
+            before bucketing (e.g. a slider that can land on 5.5).
+
+    Returns:
+        int: One of 0, 2, or 3.
+    """
+    bucket_input = int(round(stress_slider))
+    if bucket_input <= 3:
+        return 0
+    elif bucket_input <= 7:
+        return 2
+    else:
+        return 3
+
+
 def _parse_env_fields(
     form: Any,
 ) -> Tuple[Optional[Dict[str, float]], Optional[Tuple[Dict[str, str], int]]]:
     """
     Validate and parse the required environmental form fields into
     numeric values.
+
+    The ``stress_penalty`` field is treated specially: the frontend
+    sends a raw 1-10 slider value under this field name, which this
+    function converts into the {0, 2, 3} Stress_Penalty value the MLP
+    was trained on via ``_stress_slider_to_penalty()`` before it is
+    returned. See ``_STRESS_SLIDER_MIN``/``_STRESS_SLIDER_MAX`` above
+    for the valid input range.
 
     Args:
         form: The Flask ``request.form`` mapping.
@@ -253,7 +302,8 @@ def _parse_env_fields(
             A ``(values, error)`` pair. Exactly one of the two is
             ``None``: on success, ``values`` is a dict mapping each
             field name in ``_REQUIRED_ENV_FIELDS`` to its parsed
-            ``float`` value and ``error`` is ``None``; on failure,
+            ``float`` value (``stress_penalty`` already converted to
+            {0, 2, 3}) and ``error`` is ``None``; on failure,
             ``values`` is ``None`` and ``error`` is a
             ``(error_body, status_code)`` tuple ready to be returned
             directly from the route handler.
@@ -273,6 +323,23 @@ def _parse_env_fields(
                 {"error": f"Invalid numeric value for field: {field_name}"},
                 400,
             )
+
+    # Validate the stress slider is actually within its documented
+    # 1-10 range BEFORE converting it, so an out-of-range value is
+    # caught as a clear client error instead of silently clamping a
+    # frontend bug into a plausible-looking (but wrong) bucket.
+    stress_slider_value = parsed_values["stress_penalty"]
+    if not (_STRESS_SLIDER_MIN <= stress_slider_value <= _STRESS_SLIDER_MAX):
+        return None, (
+            {
+                "error": (
+                    f"Invalid value for field: stress_penalty. Expected a "
+                    f"value between {_STRESS_SLIDER_MIN} and {_STRESS_SLIDER_MAX}."
+                )
+            },
+            400,
+        )
+    parsed_values["stress_penalty"] = _stress_slider_to_penalty(stress_slider_value)
 
     return parsed_values, None
 

@@ -26,8 +26,25 @@ from typing import List, Union
 import joblib
 import numpy as np
 from tensorflow import keras
+from tensorflow.keras import layers, regularizers
 
 from config import FEATURE_SCALER_PATH, MLP_MODEL_PATH
+
+# ----------------------------------------------------------------------
+# Fixed architecture of the multimodal risk MLP, duplicated here ONLY as
+# a fallback path for `_load_mlp_model()` (see below). This must always
+# match 03_train_multimodal_mlp.ipynb's `build_model()` exactly.
+# ----------------------------------------------------------------------
+def _build_mlp_architecture(input_dim: int = 261) -> keras.Model:
+    inputs = keras.Input(shape=(input_dim,), name="multimodal_input")
+    x = layers.Dense(128, activation="relu", kernel_regularizer=regularizers.l2(1e-4),
+                      name="dense_128")(inputs)
+    x = layers.Dropout(0.5, name="dropout_1")(x)
+    x = layers.Dense(64, activation="relu", kernel_regularizer=regularizers.l2(1e-4),
+                      name="dense_64")(x)
+    x = layers.Dropout(0.5, name="dropout_2")(x)
+    outputs = layers.Dense(1, activation="linear", dtype="float32", name="risk_score_output")(x)
+    return keras.Model(inputs, outputs, name="multimodal_risk_mlp")
 
 logger = logging.getLogger(__name__)
 
@@ -74,19 +91,44 @@ def _load_mlp_model() -> keras.Model:
         keras.Model: The loaded MLP model.
 
     Raises:
-        RuntimeError: If the MLP model file cannot be loaded. The
-            underlying TensorFlow/Keras error is logged internally
-            but never exposed to the caller.
+        RuntimeError: If the MLP model file cannot be loaded (including
+            via the weights-only fallback below). The underlying
+            TensorFlow/Keras error is logged internally but never
+            exposed to the caller.
     """
     try:
-        model = keras.models.load_model(str(MLP_MODEL_PATH))
+        return keras.models.load_model(str(MLP_MODEL_PATH))
+    except Exception as primary_error:  # noqa: BLE001 - intentionally broad, see below
+        logger.warning(
+            "Full-model load of %s failed (likely a Keras version mismatch "
+            "between training and serving environments); trying the "
+            "weights-only fallback next. Original error: %s",
+            MLP_MODEL_PATH, primary_error,
+        )
+
+    # Fallback: rebuild the architecture in code and load ONLY the weights.
+    # Weights-only files don't carry the layer-config JSON that breaks
+    # across Keras versions (e.g. newer Keras adding a 'quantization_config'
+    # key that older Keras's Dense.from_config() rejects), so this works
+    # even when the full .keras artifact does not load in this environment.
+    # Expects a sibling file named <same stem>.weights.h5 next to
+    # MLP_MODEL_PATH (e.g. mlp_model.weights.h5 next to mlp_model.keras).
+    weights_path = Path(MLP_MODEL_PATH).with_suffix(".weights.h5")
+    try:
+        model = _build_mlp_architecture()
+        model.load_weights(str(weights_path))
     except Exception:  # noqa: BLE001 - intentionally broad, see below
-        logger.exception("Failed to load MLP model from %s", MLP_MODEL_PATH)
+        logger.exception(
+            "Failed to load MLP model from %s (full-model load failed; "
+            "weights-only fallback at %s also failed).",
+            MLP_MODEL_PATH, weights_path,
+        )
         raise RuntimeError(
             "Failed to load the MLP risk model artifact "
             f"('{Path(MLP_MODEL_PATH).name}')."
         ) from None
 
+    logger.info("Loaded MLP model via weights-only fallback from %s", weights_path)
     return model
 
 

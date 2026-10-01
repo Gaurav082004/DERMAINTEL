@@ -12,7 +12,19 @@ pure Python, operating only on the outputs already produced by
 ``src.cnn_engine`` and ``src.mlp_engine``.
 
 Risk tier thresholds are imported from ``config.py`` and are never
-hardcoded here.
+hardcoded here. As of the 0-100 Risk Score rescale, the expected
+tier boundaries are:
+
+    0-33   -> "Low"     (TIER_LOW_MAX    = 33)
+    34-66  -> "Medium"  (TIER_MEDIUM_MAX = 66)
+    67-100 -> "High"
+
+``config.py`` must define ``TIER_LOW_MAX`` and ``TIER_MEDIUM_MAX``
+accordingly; this module reads whatever values are configured there
+rather than hardcoding them, but the score it receives from
+``src.mlp_engine.predict_risk`` is now on a 0-100 scale (it used to
+be 0-~12), so ``config.py``'s threshold values must be updated to
+match -- see the project README / config change notes.
 """
 
 import logging

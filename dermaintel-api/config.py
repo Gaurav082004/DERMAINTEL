@@ -133,17 +133,21 @@ ENTROPY_THRESHOLD = 1.20
 # score output. They are defined ONLY here so that no other module
 # needs to hardcode these values.
 #
+# The MLP's Risk_Score is on a 0-100 scale (RS = clip(Cm * (Ls + Es), 0, 100),
+# see generate_synthetic_metadata.py for the full derivation). Updated from
+# the old 0-~11.7 scale's TIER_LOW_MAX=3 / TIER_MEDIUM_MAX=7 to match.
+#
 # Risk tiers (based on the MLP's continuous risk score):
-#   Low Risk:    score <= TIER_LOW_MAX      (<= 3)
-#   Medium Risk: TIER_LOW_MAX < score <= TIER_MEDIUM_MAX  (4-7)
-#   High Risk:   score > TIER_MEDIUM_MAX    (>= 8)
+#   Low Risk:    score <= TIER_LOW_MAX      (<= 33)
+#   Medium Risk: TIER_LOW_MAX < score <= TIER_MEDIUM_MAX  (34-66)
+#   High Risk:   score > TIER_MEDIUM_MAX    (>= 67)
 
 # Upper bound (inclusive) of the "Low" risk tier.
-TIER_LOW_MAX = 3
+TIER_LOW_MAX = 33
 
 # Upper bound (inclusive) of the "Medium" risk tier.
 # Anything above this value falls into the "High" risk tier.
-TIER_MEDIUM_MAX = 7
+TIER_MEDIUM_MAX = 66
 
 
 # ====================================================================
