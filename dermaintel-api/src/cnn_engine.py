@@ -10,29 +10,24 @@ CNN (``skin_model_final_v3_TTA.keras``). It is responsible ONLY for:
     3. Running Test-Time Augmentation (TTA) and averaging results.
     4. Extracting the 256-dimensional feature vector (``fc_256`` layer)
        used by the multimodal MLP.
-    5. Calling the existing, already-implemented OOD checker.
-    6. Calling the existing, already-implemented Grad-CAM module.
+    5. Calling the existing, already-implemented Grad-CAM module.
 
 This module intentionally does NOT:
     - Define Flask routes or HTTP endpoints.
     - Implement Grad-CAM math (that lives in the existing gradcam module).
-    - Implement OOD detection math (that lives in the existing OOD module).
     - Implement MLP inference.
     - Save any files to disk.
     - Retrain or modify model weights.
 
+OOD detection has been removed project-wide (the standalone
+src/ood_checker.py module is deleted). predict() now always runs TTA --
+there is no more OOD-based gate deciding whether to run it.
+
 =====================================================================
 EXISTING PROJECT INTERFACES USED BY THIS MODULE
 =====================================================================
-The OOD checker and Grad-CAM modules already exist in this project
-and are imported here rather than re-implemented:
-
-    src/ood_checker.py
-        def combine_ood(probabilities: np.ndarray) -> tuple[bool, str]:
-            \"\"\"
-            Returns (is_ood, reason) using MAXPROB_THRESHOLD /
-            ENTROPY_THRESHOLD from config.py.
-            \"\"\"
+The Grad-CAM module already exists in this project and is imported
+here rather than re-implemented:
 
     src/gradcam.py
         def generate(model, image_array, class_index) -> np.ndarray:
@@ -56,7 +51,6 @@ from tensorflow import keras
 
 from config import CLASS_NAMES, CNN_MODEL_PATH, TTA_ITERATIONS
 from src.gradcam import generate, overlay_heatmap
-from src.ood_checker import combine_ood
 
 logger = logging.getLogger(__name__)
 
@@ -357,21 +351,17 @@ def get_gradcam(
 
 
 # =====================================================================
-# MAIN ORCHESTRATION: single prediction -> OOD check -> TTA
+# MAIN ORCHESTRATION: TTA prediction
 # =====================================================================
 
 def predict(image_array: np.ndarray) -> Dict[str, Any]:
     """
     Run the full CNN inference workflow for a single preprocessed
-    image, following the project's existing workflow order:
+    image: always run Test-Time Augmentation and return its averaged
+    result.
 
-        Single prediction -> OOD check -> if accepted -> Run TTA
-
-    The existing OOD checker (imported, not re-implemented) is called
-    on the single-pass probabilities. If the input is flagged as
-    out-of-distribution, TTA is skipped and the single-pass result is
-    returned. Otherwise, ``predict_with_tta`` is run and its averaged
-    result is returned.
+    OOD detection has been removed (no more single-pass -> OOD gate ->
+    conditionally-skip-TTA workflow) -- TTA now always runs, unconditionally.
 
     Args:
         image_array: A preprocessed image tensor of shape
@@ -385,32 +375,9 @@ def predict(image_array: np.ndarray) -> Dict[str, Any]:
             - "predicted_index": int
             - "predicted_label": str
             - "confidence": float
-        plus:
-            - "ood": {"is_ood": bool, "reason": str}, derived from
-              the existing OOD checker's (bool, str) return value.
-            - "tta_applied": bool, whether TTA was run for this
-              prediction.
+            - "tta_applied": bool -- always True now.
     """
-    # Step 1: single forward pass.
-    single_probabilities = predict_single(image_array)
-
-    # Step 2: OOD check on the single-pass probabilities (existing,
-    # imported implementation -- not reimplemented here).
-    # combine_ood() returns a (bool, str) tuple: (is_ood, reason).
-    is_ood, ood_reason = combine_ood(single_probabilities)
-
-    # Step 3: if OOD-flagged, do NOT run TTA -- return the single-pass
-    # result as-is, matching the existing project workflow.
-    if is_ood:
-        result = _format_prediction(single_probabilities)
-        result["ood"] = {"is_ood": True, "reason": ood_reason}
-        result["tta_applied"] = False
-        return result
-
-    # Step 4: accepted as in-distribution -> run TTA and use its
-    # averaged probabilities as the final prediction.
     tta_probabilities = predict_with_tta(image_array)
     result = _format_prediction(tta_probabilities)
-    result["ood"] = {"is_ood": False, "reason": ood_reason}
     result["tta_applied"] = True
     return result

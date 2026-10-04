@@ -1,0 +1,55 @@
+.risk-trend-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.risk-trend-chart__threshold {
+  stroke: var(--color-border-strong);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.risk-trend-chart__threshold-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  fill: var(--color-text-tertiary);
+}
+
+.risk-trend-chart__line {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.risk-trend-chart__dot--low {
+  fill: var(--color-risk-low);
+}
+
+.risk-trend-chart__dot--moderate {
+  fill: var(--color-risk-moderate);
+}
+
+.risk-trend-chart__dot--elevated {
+  fill: var(--color-risk-elevated);
+}
+
+.risk-trend-chart__dot {
+  stroke: var(--color-bg-raised);
+  stroke-width: 2;
+}
+
+.risk-trend-chart__x-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  fill: var(--color-text-tertiary);
+}
+
+.risk-trend-chart__empty {
+  padding: var(--space-10) 0;
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--color-text-tertiary);
+}

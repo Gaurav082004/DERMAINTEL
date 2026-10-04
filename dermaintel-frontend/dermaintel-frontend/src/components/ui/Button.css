@@ -1,0 +1,109 @@
+.btn {
+  --btn-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: var(--btn-height);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--duration-base) var(--ease-standard),
+    border-color var(--duration-base) var(--ease-standard),
+    color var(--duration-base) var(--ease-standard),
+    box-shadow var(--duration-base) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
+.btn__icon {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+}
+
+/* ---------- Sizes ---------- */
+.btn--sm {
+  --btn-height: 32px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-xs);
+}
+
+.btn--lg {
+  --btn-height: 48px;
+  padding: 0 var(--space-6);
+  font-size: var(--text-base);
+}
+
+.btn--full {
+  width: 100%;
+}
+
+/* ---------- Variants ---------- */
+.btn--primary {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  border-color: var(--color-accent);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+}
+
+.btn--secondary {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-strong);
+}
+
+.btn--secondary:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  border-color: var(--color-text-tertiary);
+}
+
+.btn--outline {
+  background: transparent;
+  color: var(--color-accent);
+  border-color: var(--color-accent-border);
+}
+
+.btn--outline:hover:not(:disabled) {
+  background: var(--color-accent-soft);
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-color: transparent;
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.btn--danger {
+  background: transparent;
+  color: var(--color-risk-elevated);
+  border-color: rgba(244, 84, 124, 0.35);
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: var(--color-risk-elevated-soft);
+}

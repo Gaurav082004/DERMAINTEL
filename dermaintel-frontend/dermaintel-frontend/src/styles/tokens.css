@@ -1,0 +1,173 @@
+/*
+  DERMAINTEL Design Tokens
+  A clinical-instrument dark theme: deep navy surfaces, a single
+  bio-signal mint accent, and monospace used only where the interface
+  is reporting a measurement (never for prose).
+*/
+
+:root {
+  /* ---------- Color: base surfaces ---------- */
+  --color-bg: #0a0e16;
+  --color-bg-raised: #0d131e;
+  --color-surface: #111a26;
+  --color-surface-hover: #16212f;
+  --color-surface-sunken: #0b1119;
+
+  --color-border: #1e2a38;
+  --color-border-strong: #2b3b4d;
+  --color-border-hairline: rgba(255, 255, 255, 0.06);
+
+  /* ---------- Color: text ---------- */
+  --color-text-primary: #f0f4f8;
+  --color-text-secondary: #93a4b8;
+  --color-text-tertiary: #5b6b7d;
+  --color-text-disabled: #3d4a58;
+  --color-text-on-accent: #04211c;
+
+  /* ---------- Color: accent (bio-signal mint) ---------- */
+  --color-accent: #2ee6c6;
+  --color-accent-hover: #55edd1;
+  --color-accent-active: #21bfa3;
+  --color-accent-soft: rgba(46, 230, 198, 0.12);
+  --color-accent-border: rgba(46, 230, 198, 0.35);
+
+  /* ---------- Color: semantic risk scale ---------- */
+  --color-risk-low: #34d399;
+  --color-risk-low-soft: rgba(52, 211, 153, 0.14);
+  --color-risk-moderate: #f2b544;
+  --color-risk-moderate-soft: rgba(242, 181, 68, 0.14);
+  --color-risk-elevated: #f4547c;
+  --color-risk-elevated-soft: rgba(244, 84, 124, 0.14);
+  --color-risk-critical: #ef4444;
+  --color-risk-critical-soft: rgba(239, 68, 68, 0.16);
+  --color-info: #5aa9ff;
+  --color-info-soft: rgba(90, 169, 255, 0.14);
+  --color-stress: #a78bfa;
+  --color-stress-soft: rgba(167, 139, 250, 0.14);
+
+  /* ---------- Typography ---------- */
+  --font-sans: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+
+  --text-xs: 0.75rem;      /* 12px */
+  --text-sm: 0.8125rem;    /* 13px */
+  --text-base: 0.9375rem;  /* 15px */
+  --text-md: 1.0625rem;    /* 17px */
+  --text-lg: 1.25rem;      /* 20px */
+  --text-xl: 1.625rem;     /* 26px */
+  --text-2xl: 2.125rem;    /* 34px */
+  --text-3xl: 2.75rem;     /* 44px */
+
+  --leading-tight: 1.15;
+  --leading-snug: 1.35;
+  --leading-normal: 1.55;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-extrabold: 800;
+
+  /* ---------- Spacing scale ---------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+
+  /* ---------- Radius ---------- */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 999px;
+
+  /* ---------- Shadow / elevation ---------- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.55);
+  --shadow-accent-glow: 0 0 0 1px var(--color-accent-border), 0 8px 24px rgba(46, 230, 198, 0.12);
+
+  /* ---------- Motion ---------- */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+
+  /* ---------- Layout ---------- */
+  --layout-max-width: 1280px;
+  --layout-gutter: clamp(1.25rem, 4vw, 2.5rem);
+  --navbar-height: 68px;
+
+  /* ---------- Theme-specific surfaces (dark, default) ---------- */
+  --color-navbar-bg: rgba(10, 14, 22, 0.82);
+  --gradient-tint-1: rgba(46, 230, 198, 0.06);
+  --gradient-tint-2: rgba(90, 169, 255, 0.04);
+  --color-scheme: dark;
+}
+
+/*
+  ---------------------------------------------------------------
+  Light theme
+  A deliberately separate palette, not an inversion of the dark
+  one: cool off-white surfaces, deepened accent/risk hues chosen
+  for contrast on light backgrounds, and softer, cooler shadows.
+  Applied via [data-theme="light"] on the <html> element.
+  ---------------------------------------------------------------
+*/
+:root[data-theme='light'] {
+  /* ---------- Color: base surfaces ---------- */
+  --color-bg: #f4f6f9;
+  --color-bg-raised: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-hover: #eef1f5;
+  --color-surface-sunken: #eaedf2;
+
+  --color-border: #dde3ea;
+  --color-border-strong: #c7cfd9;
+  --color-border-hairline: rgba(15, 23, 32, 0.08);
+
+  /* ---------- Color: text ---------- */
+  --color-text-primary: #10161f;
+  --color-text-secondary: #49566a;
+  --color-text-tertiary: #6b7686;
+  --color-text-disabled: #aab3c0;
+  --color-text-on-accent: #ffffff;
+
+  /* ---------- Color: accent (deepened for contrast on light) ---------- */
+  --color-accent: #0d9488;
+  --color-accent-hover: #14a696;
+  --color-accent-active: #0b7d72;
+  --color-accent-soft: rgba(13, 148, 136, 0.1);
+  --color-accent-border: rgba(13, 148, 136, 0.35);
+
+  /* ---------- Color: semantic risk scale (deepened for contrast) ---------- */
+  --color-risk-low: #0f9960;
+  --color-risk-low-soft: rgba(15, 153, 96, 0.12);
+  --color-risk-moderate: #b45309;
+  --color-risk-moderate-soft: rgba(180, 83, 9, 0.12);
+  --color-risk-elevated: #c81e4e;
+  --color-risk-elevated-soft: rgba(200, 30, 78, 0.12);
+  --color-risk-critical: #dc2626;
+  --color-risk-critical-soft: rgba(220, 38, 38, 0.12);
+  --color-info: #1d6fd6;
+  --color-info-soft: rgba(29, 111, 214, 0.12);
+  --color-stress: #7c5cea;
+  --color-stress-soft: rgba(124, 92, 234, 0.12);
+
+  /* ---------- Shadow / elevation (softer, cooler) ---------- */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 32, 0.06);
+  --shadow-md: 0 8px 24px rgba(16, 24, 32, 0.08);
+  --shadow-lg: 0 16px 48px rgba(16, 24, 32, 0.12);
+  --shadow-accent-glow: 0 0 0 1px var(--color-accent-border), 0 8px 24px rgba(13, 148, 136, 0.12);
+
+  /* ---------- Theme-specific surfaces ---------- */
+  --color-navbar-bg: rgba(255, 255, 255, 0.82);
+  --gradient-tint-1: rgba(13, 148, 136, 0.05);
+  --gradient-tint-2: rgba(29, 111, 214, 0.035);
+  --color-scheme: light;
+}

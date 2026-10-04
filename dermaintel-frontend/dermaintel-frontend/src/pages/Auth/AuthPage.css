@@ -1,0 +1,110 @@
+.auth-page {
+  display: flex;
+  justify-content: center;
+  padding-block: var(--space-16) var(--space-20);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.auth-card__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-3);
+}
+
+.auth-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.auth-card__title {
+  font-size: var(--text-lg);
+  color: var(--color-text-primary);
+}
+
+.auth-card__subtitle {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  max-width: 34ch;
+}
+
+.auth-card__toggle {
+  display: flex;
+  padding: 3px;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.auth-card__toggle-option {
+  flex: 1;
+  height: 36px;
+  border: none;
+  border-radius: calc(var(--radius-md) - 3px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: background-color var(--duration-base) var(--ease-standard),
+    color var(--duration-base) var(--ease-standard);
+}
+
+.auth-card__toggle-option.is-active {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+
+.auth-card__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.auth-card__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.auth-card__demo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.auth-card__demo-badge {
+  align-self: center;
+}
+
+.auth-card__footer {
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.auth-card__footer-link {
+  color: var(--color-accent);
+  font-weight: var(--weight-semibold);
+}
+
+.auth-card__footer-link:hover {
+  text-decoration: underline;
+}

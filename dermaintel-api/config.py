@@ -105,27 +105,6 @@ TTA_ITERATIONS = 5
 
 
 # ====================================================================
-# OUT-OF-DISTRIBUTION (OOD) DETECTION CONFIGURATION
-# ====================================================================
-
-# Minimum acceptable "max softmax probability" for a prediction to be
-# considered in-distribution (i.e., an actual skin image the model
-# recognizes with reasonable confidence).
-# NOTE: This is an INITIAL calibration value. It should be revisited
-# and tuned after evaluating the model's behavior on non-skin
-# (out-of-distribution) images.
-MAXPROB_THRESHOLD = 0.60
-
-# Maximum acceptable prediction entropy for a prediction to be
-# considered in-distribution. Higher entropy indicates the model is
-# "unsure" across classes, which is a signal of a potential OOD input.
-# NOTE: This is an INITIAL calibration value. It should be revisited
-# and tuned after evaluating the model's behavior on non-skin
-# (out-of-distribution) images.
-ENTROPY_THRESHOLD = 1.20
-
-
-# ====================================================================
 # RISK TIER CONFIGURATION
 # ====================================================================
 # These thresholds define the boundaries between risk tiers (e.g.,
@@ -133,9 +112,11 @@ ENTROPY_THRESHOLD = 1.20
 # score output. They are defined ONLY here so that no other module
 # needs to hardcode these values.
 #
-# The MLP's Risk_Score is on a 0-100 scale (RS = clip(Cm * (Ls + Es), 0, 100),
-# see generate_synthetic_metadata.py for the full derivation). Updated from
-# the old 0-~11.7 scale's TIER_LOW_MAX=3 / TIER_MEDIUM_MAX=7 to match.
+# The MLP's Risk_Score is on a 0-100 scale. Each disease (Acne, Eczema,
+# Alopecia) has its own 5 per-factor weights (Temperature, Humidity, UV,
+# AQI, Stress) summing to 100 -- see DISEASE_WEIGHTS in
+# generate_synthetic_metadata.py for the full derivation. Healthy never
+# reaches the MLP (hardcoded risk 0 / Low).
 #
 # Risk tiers (based on the MLP's continuous risk score):
 #   Low Risk:    score <= TIER_LOW_MAX      (<= 33)
@@ -198,9 +179,6 @@ def validate_configuration() -> dict:
         - CLASS_NAMES contains exactly four classes.
         - IMAGE_SIZE equals (224, 224).
         - RESCALE equals 1/255.
-        - MAXPROB_THRESHOLD is between 0 and 1 (exclusive of bounds is
-          not required; 0 <= value <= 1).
-        - ENTROPY_THRESHOLD is a positive number.
         - TIER_LOW_MAX is smaller than TIER_MEDIUM_MAX.
         - All required Path objects are valid pathlib.Path instances.
 
@@ -244,18 +222,6 @@ def validate_configuration() -> dict:
             f"RESCALE must equal 1/255 ({1.0 / 255.0}), found {RESCALE}."
         )
 
-    # --- MAXPROB_THRESHOLD check ----------------------------------------------
-    if not isinstance(MAXPROB_THRESHOLD, (int, float)) or not (0 <= MAXPROB_THRESHOLD <= 1):
-        errors.append(
-            f"MAXPROB_THRESHOLD must be between 0 and 1, found {MAXPROB_THRESHOLD}."
-        )
-
-    # --- ENTROPY_THRESHOLD check -----------------------------------------------
-    if not isinstance(ENTROPY_THRESHOLD, (int, float)) or ENTROPY_THRESHOLD <= 0:
-        errors.append(
-            f"ENTROPY_THRESHOLD must be positive, found {ENTROPY_THRESHOLD}."
-        )
-
     # --- Risk tier ordering check ------------------------------------------
     if not isinstance(TIER_LOW_MAX, (int, float)) or not isinstance(TIER_MEDIUM_MAX, (int, float)):
         errors.append(
@@ -283,68 +249,3 @@ def validate_configuration() -> dict:
         "configuration_valid": len(errors) == 0,
         "errors": errors,
     }
-
-"""
-DERMAINTEL — config.py additions for feature-space OOD detection
-====================================================================
-
-I don't have the current contents of your config.py, so rather than
-overwrite it, this file contains ONLY the new constants the redesigned
-ood_checker.py needs. Copy/merge this block into your existing config.py.
-
-Every threshold used by ood_checker.py and calibrate_ood.py is defined
-here — nothing is hardcoded in the logic modules.
-"""
-
-import os
-
-# ---------------------------------------------------------------------------
-# Feature-space dimensionality
-# ---------------------------------------------------------------------------
-# Must match the output dimensionality of cnn_engine.extract_features().
-FEATURE_DIM = 256
-
-# ---------------------------------------------------------------------------
-# Mahalanobis OOD detector (primary signal)
-# ---------------------------------------------------------------------------
-# Flag an input as OOD when its Mahalanobis distance from the calibrated
-# in-distribution feature centroid exceeds this value.
-#
-# THIS DEFAULT IS A PLACEHOLDER. It must be selected experimentally against
-# a held-out validation set of in-distribution images and a representative
-# set of non-skin / OOD images — see the "threshold selection" explanation
-# below. Do not ship this default without calibrating it for your data.
-MAHALANOBIS_THRESHOLD = 30.0
-
-# Diagonal regularization (Tikhonov / ridge term) added to the covariance
-# matrix before inversion. 256-D feature covariance estimated from a
-# training set can be ill-conditioned or singular (e.g. if N_samples is
-# close to or below FEATURE_DIM, or features are collinear). This keeps
-# the matrix invertible without materially distorting well-conditioned
-# covariances.
-COVARIANCE_REGULARIZATION = 1e-6
-
-# ---------------------------------------------------------------------------
-# Softmax-based signals (secondary / optional, kept for backward
-# compatibility with any code still calling the old checks)
-# ---------------------------------------------------------------------------
-MAXPROB_THRESHOLD = 0.60
-ENTROPY_THRESHOLD = 1.2
-
-# ---------------------------------------------------------------------------
-# Calibration statistics storage
-# ---------------------------------------------------------------------------
-# Where calibrate_ood.py writes, and ood_checker.py reads, the calibrated
-# mean / covariance / inverse-covariance of the in-distribution feature
-# space.
-OOD_STATS_PATH = os.path.join("models", "ood_feature_statistics.npz")
-
-# ---------------------------------------------------------------------------
-# Calibration run parameters (used by calibrate_ood.py)
-# ---------------------------------------------------------------------------
-# Path to the training image directory used to build the calibration set.
-# Adjust to match your actual dataset layout.
-TRAINING_DATA_DIR = os.path.join("data", "train")
-
-# How often calibrate_ood.py logs progress (every N images).
-CALIBRATION_LOG_INTERVAL = 50

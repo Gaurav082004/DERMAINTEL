@@ -2,14 +2,25 @@
 DERMAINTEL API - Multimodal MLP Risk Engine
 ==============================================
 
-This module performs multimodal risk prediction by combining:
+This module performs disease-specific risk prediction by combining:
 
-    - A 256-dimensional CNN feature vector (from ``src.cnn_engine``)
+    - The final condition (from src.hybrid, post-CNN/Gemini decision):
+      one of "Acne", "Alopecia", "Eczema" -- one-hot encoded
     - 5 environmental variables
 
-into a single continuous risk score, using the already-trained MLP
+into a single continuous 0-100 risk score, using the already-trained MLP
 model (``mlp_model.keras``) and its fitted feature scaler
 (``feature_scaler.pkl``).
+
+The 256-D CNN feature vector is intentionally NOT used here anymore. The
+CNN/hybrid pipeline's job (what disease) and this module's job (how
+risky, given disease + context) are fully separated -- the MLP only ever
+sees the already-decided condition, never raw image features.
+
+"Healthy" never reaches the model: predict_risk() returns a hardcoded
+0.0 for it via a fast path, before any scaling/inference, preventing the
+"Healthy Skin Paradox" (a Healthy classification receiving a nonzero,
+potentially alarming, risk score).
 
 This module performs INFERENCE ONLY. It contains no training logic,
 no Flask routes, and no risk-tier mapping (see ``src.risk_mapper`` for
@@ -30,37 +41,16 @@ from tensorflow.keras import layers, regularizers
 
 from config import FEATURE_SCALER_PATH, MLP_MODEL_PATH
 
-# ----------------------------------------------------------------------
-# Fixed architecture of the multimodal risk MLP, duplicated here ONLY as
-# a fallback path for `_load_mlp_model()` (see below). This must always
-# match 03_train_multimodal_mlp.ipynb's `build_model()` exactly.
-# ----------------------------------------------------------------------
-def _build_mlp_architecture(input_dim: int = 261) -> keras.Model:
-    inputs = keras.Input(shape=(input_dim,), name="multimodal_input")
-    x = layers.Dense(128, activation="relu", kernel_regularizer=regularizers.l2(1e-4),
-                      name="dense_128")(inputs)
-    x = layers.Dropout(0.5, name="dropout_1")(x)
-    x = layers.Dense(64, activation="relu", kernel_regularizer=regularizers.l2(1e-4),
-                      name="dense_64")(x)
-    x = layers.Dropout(0.5, name="dropout_2")(x)
-    outputs = layers.Dense(1, activation="linear", dtype="float32", name="risk_score_output")(x)
-    return keras.Model(inputs, outputs, name="multimodal_risk_mlp")
-
 logger = logging.getLogger(__name__)
 
 # ----------------------------------------------------------------------
-# Fixed dimensional constants describing the MLP's expected input shape.
-# These are NOT tunable configuration values -- they describe the
-# structural contract between the CNN feature extractor and the MLP,
-# so they live here rather than in config.py.
+# Fixed dimensional / ordering constants describing the MLP's expected
+# input shape and layout. NOT tunable configuration -- this is the
+# structural contract with 03_train_multimodal_mlp.ipynb, so it lives
+# here rather than in config.py.
 # ----------------------------------------------------------------------
-_CNN_FEATURE_DIM = 256
-_ENV_FEATURE_DIM = 5
-_TOTAL_FEATURE_DIM = _CNN_FEATURE_DIM + _ENV_FEATURE_DIM  # 261
 
-# The environmental feature order is ABSOLUTELY FIXED and must never be
-# changed, sorted, or inferred. It is documented here purely for
-# readability; the concatenation logic below hardcodes this exact order.
+# Fixed env value order -- must never be changed, sorted, or inferred.
 _ENV_FEATURE_ORDER = (
     "temperature",
     "humidity",
@@ -68,12 +58,52 @@ _ENV_FEATURE_ORDER = (
     "aqi_pm25",
     "stress_penalty",
 )
+_ENV_FEATURE_DIM = 5
+
+# Fixed disease one-hot order -- must exactly match the notebook's
+# DISEASE_COLS (alphabetical, matches config.CLASS_NAMES minus "Healthy").
+# "Healthy" is deliberately NOT in this list: it never reaches the model
+# at all (see the fast path in predict_risk()), so it has no column here.
+_DISEASE_COLS = ("Acne", "Alopecia", "Eczema")
+_DISEASE_DIM = len(_DISEASE_COLS)
+
+# Total MLP input width: 5 env values + 3 disease one-hot columns, in
+# that order (ENV_COLS + DISEASE_COLS), matching ALL_INPUT_COLS in the
+# training notebook exactly.
+_TOTAL_FEATURE_DIM = _ENV_FEATURE_DIM + _DISEASE_DIM  # 8
 
 # Label for which risk prediction is always defined to be exactly 0.0,
 # bypassing scaling/concatenation/inference entirely. This prevents the
 # "Healthy Skin Paradox" (a Healthy classification receiving a
 # nonzero, potentially alarming, risk score from the MLP).
 _HEALTHY_LABEL = "Healthy"
+
+# Risk Score contract: the MLP was trained on targets bounded to this
+# range (each disease's 5 per-factor weights sum to 100, see
+# generate_synthetic_metadata.py), so predict_risk() clamps its output
+# to match.
+_RISK_SCORE_MIN = 0.0
+_RISK_SCORE_MAX = 100.0
+
+
+# ----------------------------------------------------------------------
+# Fixed architecture of the multimodal risk MLP, duplicated here ONLY as
+# a fallback path for `_load_mlp_model()` (see below). This must always
+# match 03_train_multimodal_mlp.ipynb's `build_model()` exactly:
+#   Input(8) -> Dense(16, relu, L2) -> Dropout(0.3)
+#             -> Dense(8, relu, L2)  -> Dropout(0.3)
+#             -> Dense(1, linear)
+# ----------------------------------------------------------------------
+def _build_mlp_architecture(input_dim: int = _TOTAL_FEATURE_DIM) -> keras.Model:
+    inputs = keras.Input(shape=(input_dim,), name="multimodal_input")
+    x = layers.Dense(16, activation="relu", kernel_regularizer=regularizers.l2(1e-4),
+                      name="dense_16")(inputs)
+    x = layers.Dropout(0.3, name="dropout_1")(x)
+    x = layers.Dense(8, activation="relu", kernel_regularizer=regularizers.l2(1e-4),
+                      name="dense_8")(x)
+    x = layers.Dropout(0.3, name="dropout_2")(x)
+    outputs = layers.Dense(1, activation="linear", dtype="float32", name="risk_score_output")(x)
+    return keras.Model(inputs, outputs, name="multimodal_risk_mlp")
 
 
 # =====================================================================
@@ -87,14 +117,9 @@ def _load_mlp_model() -> keras.Model:
     This is called exactly once, at module import time, so the model
     is never reloaded on a per-request basis.
 
-    Returns:
-        keras.Model: The loaded MLP model.
-
     Raises:
         RuntimeError: If the MLP model file cannot be loaded (including
-            via the weights-only fallback below). The underlying
-            TensorFlow/Keras error is logged internally but never
-            exposed to the caller.
+            via the weights-only fallback below).
     """
     try:
         return keras.models.load_model(str(MLP_MODEL_PATH))
@@ -108,11 +133,9 @@ def _load_mlp_model() -> keras.Model:
 
     # Fallback: rebuild the architecture in code and load ONLY the weights.
     # Weights-only files don't carry the layer-config JSON that breaks
-    # across Keras versions (e.g. newer Keras adding a 'quantization_config'
-    # key that older Keras's Dense.from_config() rejects), so this works
-    # even when the full .keras artifact does not load in this environment.
-    # Expects a sibling file named <same stem>.weights.h5 next to
-    # MLP_MODEL_PATH (e.g. mlp_model.weights.h5 next to mlp_model.keras).
+    # across Keras versions, so this works even when the full .keras
+    # artifact does not load in this environment. Expects a sibling file
+    # named <same stem>.weights.h5 next to MLP_MODEL_PATH.
     weights_path = Path(MLP_MODEL_PATH).with_suffix(".weights.h5")
     try:
         model = _build_mlp_architecture()
@@ -136,17 +159,11 @@ def _load_feature_scaler() -> object:
     """
     Load the fitted feature scaler from the path defined in config.py.
 
-    This is called exactly once, at module import time.
-
-    Returns:
-        object: The loaded scaler object (e.g., a fitted
-        scikit-learn ``StandardScaler`` or ``MinMaxScaler``).
-
     Raises:
         RuntimeError: If the scaler file cannot be loaded, or if its
             expected input dimensionality does not match the MLP's
-            expected input size (256 CNN features + 5 environmental
-            variables = 261).
+            expected input size (5 environmental variables + 3 disease
+            one-hot columns = 8).
     """
     try:
         scaler = joblib.load(FEATURE_SCALER_PATH)
@@ -160,18 +177,17 @@ def _load_feature_scaler() -> object:
         ) from None
 
     # Defensive check: the loaded scaler MUST have been fitted on
-    # exactly 261 features (256 CNN features + 5 environmental
-    # variables). If not, the wrong artifact has been loaded and
-    # scaling would silently corrupt every prediction.
+    # exactly 8 features. If not, the wrong artifact has been loaded
+    # and scaling would silently corrupt every prediction.
     n_features = getattr(scaler, "n_features_in_", None)
     if n_features != _TOTAL_FEATURE_DIM:
         raise RuntimeError(
             "Loaded feature scaler has an incorrect dimensionality: "
             f"expected n_features_in_ == {_TOTAL_FEATURE_DIM} "
-            f"({_CNN_FEATURE_DIM} CNN features + {_ENV_FEATURE_DIM} "
-            f"environmental variables), but got {n_features!r}. "
+            f"({_ENV_FEATURE_DIM} environmental variables + {_DISEASE_DIM} "
+            f"disease one-hot columns), but got {n_features!r}. "
             "This indicates an incorrect or mismatched scaler artifact "
-            "has been loaded."
+            "has been loaded (e.g. the old 261-D CNN-feature-era scaler)."
         )
 
     return scaler
@@ -188,50 +204,6 @@ _feature_scaler: object = _load_feature_scaler()
 # INPUT VALIDATION HELPERS
 # =====================================================================
 
-def _validate_cnn_features(cnn_features: np.ndarray) -> np.ndarray:
-    """
-    Validate the CNN feature vector before use.
-
-    Requirements:
-        - Must be a NumPy array.
-        - Must have shape exactly ``(256,)``.
-        - Must have a numeric dtype.
-
-    Args:
-        cnn_features: The candidate CNN feature vector.
-
-    Returns:
-        np.ndarray: The validated feature vector, unchanged.
-
-    Raises:
-        ValueError: If any requirement above is not satisfied.
-    """
-    if not isinstance(cnn_features, np.ndarray):
-        raise ValueError(
-            "'cnn_features' must be a NumPy array, got "
-            f"{type(cnn_features).__name__}."
-        )
-
-    if cnn_features.shape != (_CNN_FEATURE_DIM,):
-        raise ValueError(
-            f"'cnn_features' must have shape ({_CNN_FEATURE_DIM},), "
-            f"got {cnn_features.shape}."
-        )
-
-    if not np.issubdtype(cnn_features.dtype, np.number):
-        raise ValueError(
-            "'cnn_features' must have a numeric dtype, got "
-            f"{cnn_features.dtype}."
-        )
-
-    if not np.all(np.isfinite(cnn_features)):
-        raise ValueError(
-            "'cnn_features' contains non-finite values (NaN or inf)."
-        )
-
-    return cnn_features
-
-
 def _validate_env_vector(env_vector: Union[np.ndarray, List[float]]) -> np.ndarray:
     """
     Validate the environmental variable vector before use.
@@ -239,7 +211,7 @@ def _validate_env_vector(env_vector: Union[np.ndarray, List[float]]) -> np.ndarr
     Requirements:
         - Exactly 5 values.
         - All values numeric (no ``None``).
-        - No NaN values.
+        - No NaN/infinite values.
 
     Args:
         env_vector: The candidate environmental variable vector, as a
@@ -286,41 +258,53 @@ def _validate_env_vector(env_vector: Union[np.ndarray, List[float]]) -> np.ndarr
     return env_array
 
 
+def _encode_disease_one_hot(predicted_label: str) -> np.ndarray:
+    """
+    One-hot encode a disease label into the fixed 3-wide vector the MLP
+    was trained on, in _DISEASE_COLS order (Acne, Alopecia, Eczema).
+
+    Args:
+        predicted_label: The final condition (post-CNN/Gemini hybrid
+            decision). Must be one of _DISEASE_COLS -- "Healthy" is
+            invalid here because it's handled entirely by the fast
+            path in predict_risk() and never reaches this function.
+
+    Raises:
+        ValueError: If predicted_label is not a recognized non-Healthy
+            disease class.
+    """
+    if predicted_label not in _DISEASE_COLS:
+        raise ValueError(
+            f"'predicted_label' must be one of {_DISEASE_COLS} (Healthy is "
+            f"handled separately via the fast path), got {predicted_label!r}."
+        )
+    return np.array(
+        [1.0 if predicted_label == disease else 0.0 for disease in _DISEASE_COLS],
+        dtype=np.float64,
+    )
+
+
 # =====================================================================
 # FEATURE CONCATENATION / SCALING
 # =====================================================================
 
-def _build_scaled_input(
-    cnn_features: np.ndarray, env_array: np.ndarray
-) -> np.ndarray:
+def _build_scaled_input(env_array: np.ndarray, disease_one_hot: np.ndarray) -> np.ndarray:
     """
-    Concatenate the CNN feature vector and environmental variables in
+    Concatenate the environmental vector and disease one-hot vector in
     the fixed, required order, then scale the result with the loaded
     feature scaler.
 
-    Order (never sorted, never inferred, never changed):
-        feature_0 ... feature_255, temperature, humidity, uv_index,
-        aqi_pm25, stress_penalty
-
-    Args:
-        cnn_features: Validated CNN feature vector, shape (256,).
-        env_array: Validated environmental variable vector, shape (5,).
+    Order (never sorted, never inferred, never changed -- matches
+    ALL_INPUT_COLS = ENV_COLS + DISEASE_COLS in the training notebook):
+        temperature, humidity, uv_index, aqi_pm25, stress_penalty,
+        Acne, Alopecia, Eczema
 
     Returns:
-        np.ndarray: The scaled input tensor, shape (1, 261), ready to
-        be passed directly to the MLP.
+        np.ndarray: The scaled input tensor, shape (1, 8), ready to be
+        passed directly to the MLP.
     """
-    # Concatenate in the fixed order: CNN features first, then the
-    # environmental variables in their fixed order.
-    combined = np.concatenate(
-        [cnn_features.astype(np.float64), env_array], axis=0
-    )  # shape: (261,)
-
-    # Reshape to (1, 261) before scaling, since the scaler and MLP
-    # both expect a 2D, batch-of-one input.
+    combined = np.concatenate([env_array, disease_one_hot], axis=0)  # shape: (8,)
     combined = combined.reshape(1, _TOTAL_FEATURE_DIM)
-
-    # Never feed raw values into the MLP -- always scale first.
     scaled = _feature_scaler.transform(combined)
     return scaled
 
@@ -330,45 +314,47 @@ def _build_scaled_input(
 # =====================================================================
 
 def predict_risk(
-    cnn_features: np.ndarray,
     env_vector: Union[np.ndarray, List[float]],
     predicted_label: str,
 ) -> float:
     """
-    Predict a continuous risk score from a CNN feature vector and a
-    set of environmental variables, using the trained multimodal MLP.
+    Predict a continuous 0-100 risk score from the 5 environmental
+    variables and the final condition, using the trained disease-
+    specific-weighted multimodal MLP.
 
     This is the ONLY public prediction function in this module.
 
     Fast path: if ``predicted_label`` is ``"Healthy"``, this function
-    immediately returns ``0.0`` without scaling, concatenation, or MLP
+    immediately returns ``0.0`` without scaling, encoding, or MLP
     inference. This exists specifically to prevent the "Healthy Skin
     Paradox," where a Healthy classification could otherwise receive
     a nonzero, potentially alarming, risk score from the MLP.
 
     Args:
-        cnn_features: The 256-dimensional CNN feature vector, as
-            returned by ``src.cnn_engine.extract_features``. Must be
-            a NumPy array of shape ``(256,)`` with a numeric dtype.
         env_vector: The 5 environmental variables, as a NumPy array
             or list, in the fixed order: ``(temperature, humidity,
             uv_index, aqi_pm25, stress_penalty)``.
-        predicted_label: The CNN's predicted class label (e.g. one of
-            ``config.CLASS_NAMES``). Used only to check for the
-            ``"Healthy"`` fast path.
+        predicted_label: The final condition (the CNN/Gemini hybrid's
+            decision -- see ``src.hybrid.predict``). One of
+            ``config.CLASS_NAMES`` ("Acne", "Alopecia", "Eczema",
+            "Healthy").
 
     Returns:
-        float: The raw continuous risk score predicted by the MLP, or
-        ``0.0`` if ``predicted_label == "Healthy"``. The value is
-        returned exactly as predicted -- it is never rounded, clipped,
-        or converted into a risk tier.
+        float: The continuous risk score, on a 0-100 scale, or
+        ``0.0`` if ``predicted_label == "Healthy"``. The MLP's raw
+        prediction is NOT rounded or converted into a risk tier, but
+        IS clamped to [0, 100] (the training target was itself bounded
+        to that range by construction -- each disease's 5 per-factor
+        weights sum to 100 -- so a raw prediction outside [0, 100]
+        signals the model extrapolating on an out-of-distribution
+        input, not a genuinely higher/lower risk).
 
     Raises:
-        ValueError: If ``cnn_features`` or ``env_vector`` fail input
-            validation.
+        ValueError: If ``env_vector`` fails validation, or
+            ``predicted_label`` is not a recognized class.
     """
-    # Fast path for Healthy predictions: skip scaling, concatenation,
-    # and MLP inference entirely.
+    # Fast path for Healthy predictions: skip encoding, scaling, and
+    # MLP inference entirely.
     if predicted_label == _HEALTHY_LABEL:
         logger.debug(
             "predicted_label is 'Healthy' -- returning risk score 0.0 "
@@ -377,18 +363,29 @@ def predict_risk(
         return 0.0
 
     # Validate inputs before doing anything else.
-    validated_cnn_features = _validate_cnn_features(cnn_features)
     validated_env_array = _validate_env_vector(env_vector)
+    disease_one_hot = _encode_disease_one_hot(predicted_label)
 
-    # Build the (1, 261) scaled input tensor.
-    scaled_input = _build_scaled_input(validated_cnn_features, validated_env_array)
+    # Build the (1, 8) scaled input tensor.
+    scaled_input = _build_scaled_input(validated_env_array, disease_one_hot)
 
     # Run MLP inference.
     raw_prediction = _mlp_model.predict(scaled_input, verbose=0)
-
-    # The MLP output is expected to be shape (1, 1) or (1,) for a
-    # single continuous score; extract the scalar value exactly as
-    # predicted, with no rounding, clipping, or tier conversion.
     score = float(np.asarray(raw_prediction).reshape(-1)[0])
+
+    # Clamp to the documented 0-100 contract -- see docstring above for
+    # why. Logged at WARNING so out-of-range upstream inputs are visible
+    # in the API logs rather than silently producing a confusing score.
+    if score < _RISK_SCORE_MIN or score > _RISK_SCORE_MAX:
+        logger.warning(
+            "MLP raw prediction %.2f is outside [%.0f, %.0f] -- clamping. "
+            "This usually means env_vector contains a value outside the "
+            "training distribution (expected ranges: Temperature 0-45, "
+            "Humidity 0-100, UV_Index 0-11, AQI_PM25 0-300, "
+            "Stress_Penalty in {0, 2, 3}). disease=%s env_vector=%s",
+            score, _RISK_SCORE_MIN, _RISK_SCORE_MAX, predicted_label,
+            validated_env_array.tolist(),
+        )
+    score = min(max(score, _RISK_SCORE_MIN), _RISK_SCORE_MAX)
 
     return score

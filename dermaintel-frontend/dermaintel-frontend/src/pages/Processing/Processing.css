@@ -1,0 +1,142 @@
+.processing-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding-top: var(--space-10);
+  padding-bottom: var(--space-10);
+  text-align: center;
+}
+
+.processing-card--error {
+  align-items: center;
+}
+
+.processing-card__heading {
+  font-size: var(--text-lg);
+  color: var(--color-text-primary);
+}
+
+.processing-card__body {
+  max-width: 520px;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.processing-card__actions {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.processing-spinner {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid var(--color-border-strong);
+  border-top-color: var(--color-accent);
+  animation: processing-spin 0.9s linear infinite;
+}
+
+@keyframes processing-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.activity-console {
+  width: 100%;
+  max-width: 520px;
+  margin-top: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  text-align: left;
+  overflow: hidden;
+}
+
+.activity-console__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-raised);
+}
+
+.activity-console__title {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  color: var(--color-text-secondary);
+}
+
+.activity-console__clear {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.activity-console__clear:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-text-secondary);
+}
+
+.activity-console__body {
+  max-height: 160px;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.activity-console__line {
+  display: flex;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.activity-console__time {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+}
+
+.activity-console__message {
+  color: var(--color-text-primary);
+}
+
+.activity-console__cursor-row {
+  display: flex;
+  padding-top: 2px;
+}
+
+.activity-console__cursor {
+  width: 7px;
+  height: 13px;
+  background: var(--color-accent);
+  animation: activity-console-blink 1s step-end infinite;
+}
+
+@keyframes activity-console-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}

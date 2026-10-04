@@ -15,10 +15,9 @@ modules in the exact order required:
 
     config.validate_paths()      -> startup artifact check
     src.preprocessor.preprocess  -> image preprocessing
-    src.cnn_engine.predict       -> CNN classification (+ OOD + TTA)
+    src.cnn_engine.predict       -> CNN classification (+ TTA)
     src.hybrid.predict           -> hybrid CNN/AI final classification
-    src.cnn_engine.extract_features -> 256-d feature vector
-    src.mlp_engine.predict_risk  -> multimodal risk score
+    src.mlp_engine.predict_risk  -> disease-specific risk score (env + final_condition)
     src.risk_mapper.score_to_tier / get_recommendations
     src.cnn_engine.get_gradcam   -> Grad-CAM overlay
 
@@ -44,7 +43,7 @@ from config import validate_paths
 from src import cnn_engine, hybrid, mlp_engine, preprocessor, risk_mapper
 
 # Configure logging so the INFO-level events required by this module
-# (startup, warm-up, request lifecycle, OOD rejections, timing, etc.)
+# (startup, warm-up, request lifecycle, timing, etc.)
 # are actually emitted, not silently filtered out by Python's default
 # WARNING-level root logger.
 logging.basicConfig(
@@ -380,9 +379,6 @@ def predict_endpoint() -> Any:
         1. Validate the uploaded image and environmental fields.
         2. Preprocess the image (``src.preprocessor.preprocess``).
         3. Run CNN classification (``src.cnn_engine.predict``).
-        4. If the CNN's OOD check rejects the image, return
-           immediately (HTTP 400) without running feature extraction
-           or the MLP.
         5. Run hybrid CNN/AI classification (``src.hybrid.predict``)
            to obtain the final condition and confidence.
         6. Extract the 256-d CNN feature vector.
@@ -396,7 +392,7 @@ def predict_endpoint() -> Any:
 
     Returns:
         Flask response: HTTP 200 with the full structured prediction
-        JSON on success; HTTP 400 for invalid input or OOD rejection;
+        JSON on success; HTTP 400 for invalid input;
         HTTP 500 for unexpected internal errors. NumPy stack traces
         and internal implementation details are never exposed to the
         client.
@@ -425,7 +421,7 @@ def predict_endpoint() -> Any:
         original_rgb = processed["original_rgb"]
         model_input = processed["model_input"]
 
-        # --- Step 3: CNN prediction (includes OOD check + TTA) ---
+        # --- Step 3: CNN prediction (includes TTA) ---
         cnn_start = time.perf_counter()
 
         prediction = cnn_engine.predict(model_input)
@@ -446,10 +442,7 @@ def predict_endpoint() -> Any:
         final_condition = hybrid_result["condition"]
         final_confidence = hybrid_result["confidence"]
 
-        # --- Step 5: feature extraction ---
-        cnn_features = cnn_engine.extract_features(model_input)
-
-        # --- Step 6: environmental vector, EXACT fixed order ---
+        # --- Step 5: environmental vector, EXACT fixed order ---
         env_vector: List[float] = [
             env_values["temperature"],
             env_values["humidity"],
@@ -458,20 +451,25 @@ def predict_endpoint() -> Any:
             env_values["stress_penalty"],
         ]
 
-        # --- Step 7: multimodal risk prediction ---
+        # --- Step 6: multimodal risk prediction ---
+        # No CNN feature extraction here anymore: the MLP's input is now
+        # just the 5 env values + final_condition (one-hot encoded inside
+        # mlp_engine). The CNN/hybrid pipeline's job (what disease) and
+        # this call's job (how risky, given disease + context) are fully
+        # separated -- model_input is not touched again after Step 3/4.
         risk_score = mlp_engine.predict_risk(
-            cnn_features, env_vector, final_condition
+            env_vector, final_condition
         )
 
-        # --- Step 8: risk tier ---
+        # --- Step 7: risk tier ---
         risk_tier = risk_mapper.score_to_tier(risk_score)
 
-        # --- Step 9: recommendations ---
+        # --- Step 8: recommendations ---
         recommendations = risk_mapper.get_recommendations(
             final_condition, risk_tier
         )
 
-        # --- Step 10: Grad-CAM (best-effort, never fails the request) ---
+        # --- Step 9: Grad-CAM (best-effort, never fails the request) ---
         gradcam_data_uri: Optional[str] = None
         gradcam_start = time.perf_counter()
 
@@ -489,7 +487,7 @@ def predict_endpoint() -> Any:
         gradcam_time_ms = (time.perf_counter() - gradcam_start) * 1000
         logger.info("Grad-CAM time: %.2f ms", gradcam_time_ms)
 
-        # --- Step 11: processing time ---
+        # --- Step 10: processing time ---
         processing_time_ms = int((time.perf_counter() - start_time) * 1000)
 
         response_body: Dict[str, Any] = {

@@ -92,7 +92,7 @@ import matplotlib.pyplot as plt
 # ---------------------------------------------------------------------------
 
 SEED = 42
-DATASET_DIR = Path("data")  # root containing train/ val/ test/ subfolders
+DATASET_DIR = Path(r"C:\Users\GAURAV\Major Project Code\ml\data\final")  # root containing train/ val/ test/ subfolders
 OUTPUT_DIR = Path("outputs")
 PLOTS_DIR = OUTPUT_DIR / "plots"
 OUTPUT_CSV = OUTPUT_DIR / "synthetic_multimodal_dataset.csv"
@@ -103,13 +103,21 @@ VALID_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp"}
 DISEASE_FOLDERS = ["Acne", "Eczema", "Alopecia", "Healthy"]
 SPLITS = ["train", "val", "test"]
 
-# Disease multipliers (Cm) — used exactly as given, do not modify.
-DISEASE_MULTIPLIERS = {
-    "Acne": 1.1,
-    "Eczema": 1.3,
-    "Alopecia": 1.2,
-    "Healthy": 0.8,
+# Per-disease factor weights (0-100 scale, each disease's 5 weights sum to
+# 100), derived from the DERMAINTEL literature review. Replaces the old
+# single universal weight split + scalar disease multiplier (Cm) entirely
+# -- disease sensitivity is now expressed directly via these weights, not
+# via a separate multiplier applied afterward. Healthy is NOT included:
+# Healthy bypasses the MLP entirely (hardcoded risk 0 / Low), so it needs
+# no weight vector -- see the Healthy override in the generation loop below.
+DISEASE_WEIGHTS = {
+    "Acne":     {"Temperature": 17, "Humidity": 17, "UV": 16, "AQI": 25, "Stress": 25},
+    "Eczema":   {"Temperature": 23, "Humidity": 15, "UV": 8,  "AQI": 31, "Stress": 23},
+    "Alopecia": {"Temperature": 24, "Humidity": 5,  "UV": 12, "AQI": 24, "Stress": 35},
 }
+for _disease, _weights in DISEASE_WEIGHTS.items():
+    assert sum(_weights.values()) == 100, f"{_disease} weights must sum to 100"
+del _disease, _weights
 
 # Stress category -> numeric value, used exactly as given.
 STRESS_VALUE_MAP = {"Low": 0, "Medium": 2, "High": 3}
@@ -162,7 +170,6 @@ class DiseaseConfig:
     uv_index: TruncNormalSpec
     aqi_pm25: TruncLognormalSpec
     stress_probs: dict  # {"Low": p, "Medium": p, "High": p}
-    disease_multiplier: float
 
 
 DISEASE_CONFIGS = {
@@ -172,7 +179,6 @@ DISEASE_CONFIGS = {
         uv_index=TruncNormalSpec(mean=6.5, sd=2.0, lo=1, hi=11),
         aqi_pm25=TruncLognormalSpec(mu=math.log(55), sigma=0.45, lo=10, hi=200),
         stress_probs={"Low": 0.20, "Medium": 0.40, "High": 0.40},
-        disease_multiplier=DISEASE_MULTIPLIERS["Acne"],
     ),
     "Eczema": DiseaseConfig(
         temperature=TruncNormalSpec(mean=24, sd=7, lo=5, hi=40),
@@ -182,7 +188,6 @@ DISEASE_CONFIGS = {
         uv_index=TruncNormalSpec(mean=5.0, sd=2.5, lo=0, hi=11),
         aqi_pm25=TruncLognormalSpec(mu=math.log(45), sigma=0.5, lo=8, hi=180),
         stress_probs={"Low": 0.25, "Medium": 0.40, "High": 0.35},
-        disease_multiplier=DISEASE_MULTIPLIERS["Eczema"],
     ),
     "Alopecia": DiseaseConfig(
         # Temperature/Humidity are explicitly flagged "assumption-based" in
@@ -193,7 +198,6 @@ DISEASE_CONFIGS = {
         uv_index=TruncNormalSpec(mean=4.0, sd=2.5, lo=0, hi=11),
         aqi_pm25=TruncLognormalSpec(mu=math.log(50), sigma=0.5, lo=10, hi=180),
         stress_probs={"Low": 0.20, "Medium": 0.35, "High": 0.45},
-        disease_multiplier=DISEASE_MULTIPLIERS["Alopecia"],
     ),
     "Healthy": DiseaseConfig(
         temperature=TruncNormalSpec(mean=26, sd=6, lo=10, hi=42),
@@ -201,21 +205,18 @@ DISEASE_CONFIGS = {
         uv_index=TruncNormalSpec(mean=6.0, sd=2.5, lo=0, hi=11),
         aqi_pm25=TruncLognormalSpec(mu=math.log(35), sigma=0.6, lo=5, hi=150),
         stress_probs={"Low": 0.40, "Medium": 0.40, "High": 0.20},
-        disease_multiplier=DISEASE_MULTIPLIERS["Healthy"],
     ),
 }
 
 # ---------------------------------------------------------------------------
 # RISK SCORE NORMALIZATION CONSTANTS (0-100 scale; see module docstring)
 # ---------------------------------------------------------------------------
-# Maximum point contribution of each factor. Must sum to 100.
-LIFESTYLE_WEIGHT = 30.0   # Stress (all of Ls, in this Phase-1 generator)
-AQI_WEIGHT = 25.0
-UV_WEIGHT = 20.0
-TEMPERATURE_WEIGHT = 15.0
-HUMIDITY_WEIGHT = 10.0
+# NOTE: per-factor WEIGHTS now come from DISEASE_WEIGHTS (disease-specific,
+# see above) rather than a single universal set. The constants below only
+# define each factor's *shape* (ramp ceiling / comfort zone) -- the same
+# shape is reused across diseases, just scaled by that disease's weight.
 
-# Stress: Ls = LIFESTYLE_WEIGHT * (stress_value / STRESS_MAX_VALUE)
+# Stress: linear ramp, scaled by STRESS_MAX_VALUE
 STRESS_MAX_VALUE = max(STRESS_VALUE_MAP.values())  # 3 (High)
 
 # AQI/PM2.5: linear ramp to AQI_WEIGHT at AQI_CEILING (µg/m^3).
@@ -365,74 +366,66 @@ def _u_shaped_score(
     return weight * fraction
 
 
-def compute_stress_score(stress_value: float) -> float:
-    """Stress sub-score, linear in Stress_Penalty, scaled to [0, LIFESTYLE_WEIGHT]."""
-    return _linear_ramp(stress_value, STRESS_MAX_VALUE, LIFESTYLE_WEIGHT)
+def compute_stress_score(stress_value: float, weight: float) -> float:
+    """Stress sub-score, linear in Stress_Penalty, scaled to [0, weight]."""
+    return _linear_ramp(stress_value, STRESS_MAX_VALUE, weight)
 
 
-def compute_aqi_score(aqi_pm25: float) -> float:
-    """AQI/PM2.5 sub-score, linear ramp to AQI_WEIGHT at AQI_CEILING."""
-    return _linear_ramp(aqi_pm25, AQI_CEILING, AQI_WEIGHT)
+def compute_aqi_score(aqi_pm25: float, weight: float) -> float:
+    """AQI/PM2.5 sub-score, linear ramp to `weight` at AQI_CEILING."""
+    return _linear_ramp(aqi_pm25, AQI_CEILING, weight)
 
 
-def compute_uv_score(uv_index: float) -> float:
-    """UV Index sub-score, linear ramp to UV_WEIGHT at UV_CEILING."""
-    return _linear_ramp(uv_index, UV_CEILING, UV_WEIGHT)
+def compute_uv_score(uv_index: float, weight: float) -> float:
+    """UV Index sub-score, linear ramp to `weight` at UV_CEILING."""
+    return _linear_ramp(uv_index, UV_CEILING, weight)
 
 
-def compute_temperature_score(temperature: float) -> float:
-    """Temperature sub-score, U-shaped around the comfort zone."""
+def compute_temperature_score(temperature: float, weight: float) -> float:
+    """Temperature sub-score, U-shaped around the comfort zone, scaled to [0, weight]."""
     return _u_shaped_score(
         temperature, TEMPERATURE_COMFORT_LOW, TEMPERATURE_COMFORT_HIGH,
-        TEMPERATURE_MIN, TEMPERATURE_MAX, TEMPERATURE_WEIGHT,
+        TEMPERATURE_MIN, TEMPERATURE_MAX, weight,
     )
 
 
-def compute_humidity_score(humidity: float) -> float:
-    """Humidity sub-score, U-shaped around the comfort zone."""
+def compute_humidity_score(humidity: float, weight: float) -> float:
+    """Humidity sub-score, U-shaped around the comfort zone, scaled to [0, weight]."""
     return _u_shaped_score(
         humidity, HUMIDITY_COMFORT_LOW, HUMIDITY_COMFORT_HIGH,
-        HUMIDITY_MIN, HUMIDITY_MAX, HUMIDITY_WEIGHT,
+        HUMIDITY_MIN, HUMIDITY_MAX, weight,
     )
 
 
-def compute_lifestyle_score(stress_value: float) -> float:
+def compute_risk_score(
+    disease: str, temperature: float, humidity: float, uv_index: float,
+    aqi_pm25: float, stress_value: float,
+) -> float:
     """
-    Compute Lifestyle Score (Ls), range [0, LIFESTYLE_WEIGHT] = [0, 30].
-    In this Phase 1 generator, Sleep, Diet, and Hydration are excluded, so
-    Ls is exactly the normalized Stress sub-score.
-    """
-    return compute_stress_score(stress_value)
+    Compute the continuous Risk Score, on a 0-100 scale, using the given
+    disease's own per-factor weights from DISEASE_WEIGHTS (which replace
+    the old universal weight split + scalar disease multiplier entirely):
 
+        RS = clip( stress_score(w_stress) + aqi_score(w_aqi)
+                    + uv_score(w_uv) + temperature_score(w_temp)
+                    + humidity_score(w_hum), 0, 100 )
 
-def compute_environmental_score(aqi_pm25: float, uv_index: float, humidity: float, temperature: float) -> float:
+    Since each disease's 5 weights sum to exactly 100 and each sub-score
+    is individually clipped to its own weight, the sum is already
+    mathematically bounded to [0, 100] -- the final clip is a defensive
+    safety net, not something expected to actually trigger. `disease`
+    must be a key in DISEASE_WEIGHTS (i.e. "Acne", "Eczema", or
+    "Alopecia" -- NOT "Healthy", which bypasses this function entirely
+    via the Healthy Skin Paradox override in the generation loop).
     """
-    Compute Environmental Score (Es) as the sum of the AQI, UV Index,
-    Temperature, and Humidity sub-scores. Range [0, 70]
-    (25 + 20 + 15 + 10 = AQI_WEIGHT + UV_WEIGHT + TEMPERATURE_WEIGHT +
-    HUMIDITY_WEIGHT).
-    """
-    return (
-        compute_aqi_score(aqi_pm25)
-        + compute_uv_score(uv_index)
-        + compute_temperature_score(temperature)
-        + compute_humidity_score(humidity)
+    weights = DISEASE_WEIGHTS[disease]
+    raw = (
+        compute_stress_score(stress_value, weights["Stress"])
+        + compute_aqi_score(aqi_pm25, weights["AQI"])
+        + compute_uv_score(uv_index, weights["UV"])
+        + compute_temperature_score(temperature, weights["Temperature"])
+        + compute_humidity_score(humidity, weights["Humidity"])
     )
-
-
-def compute_risk_score(disease_multiplier: float, lifestyle_score: float, environmental_score: float) -> float:
-    """
-    Compute the continuous Risk Score, on a 0-100 scale:
-
-        RS = clip( Cm * (Ls + Es), 0, 100 )
-
-    Ls + Es sums to at most 100 (30 + 70) before the disease multiplier is
-    applied; the multiplier (0.8-1.3) can push a near-maximal base score
-    above 100, so the final clip enforces the 0-100 contract. This value is
-    NOT rounded — it is stored as the regression target for the multimodal
-    MLP. Round only when displaying in the application (see round_half_up()).
-    """
-    raw = disease_multiplier * (lifestyle_score + environmental_score)
     return min(max(raw, RISK_SCORE_MIN), RISK_SCORE_MAX)
 
 
@@ -555,34 +548,32 @@ def generate_dataset(dataset_dir: Path, profiles_per_image: int, seed: int) -> p
             # Numeric encoding of the Stress column (0/2/3), always populated —
             # including for Healthy — so the MLP pipeline can use it directly
             # instead of re-deriving it from the "Low"/"Medium"/"High" string.
-            # Note this is distinct from Lifestyle_Score, which IS forced to 0
+            # Note this is distinct from Stress_Score, which IS forced to 0
             # for Healthy as part of the Risk Score override below.
             stress_penalty = stress_value
-
-            disease_multiplier = DISEASE_CONFIGS[disease].disease_multiplier
 
             if disease == "Healthy":
                 # Healthy images must always represent a healthy individual,
                 # regardless of the (still-sampled, still-realistic)
                 # environmental values above. This is intentional per the
-                # project's fixed design decision.
+                # project's fixed design decision. Healthy also has no
+                # entry in DISEASE_WEIGHTS -- it bypasses the MLP entirely
+                # at inference (hardcoded risk 0 / Low), so there is no
+                # per-factor weight vector to compute sub-scores from.
                 stress_score = 0.0
                 aqi_score = 0.0
                 uv_score = 0.0
                 temperature_score = 0.0
                 humidity_score = 0.0
-                lifestyle_score = 0.0
-                environmental_score = 0.0
                 risk_score = 0.0
             else:
-                stress_score = compute_stress_score(stress_value)
-                aqi_score = compute_aqi_score(aqi_pm25)
-                uv_score = compute_uv_score(uv_index)
-                temperature_score = compute_temperature_score(temperature)
-                humidity_score = compute_humidity_score(humidity)
-                lifestyle_score = compute_lifestyle_score(stress_value)
-                environmental_score = compute_environmental_score(aqi_pm25, uv_index, humidity, temperature)
-                risk_score = compute_risk_score(disease_multiplier, lifestyle_score, environmental_score)
+                weights = DISEASE_WEIGHTS[disease]
+                stress_score = compute_stress_score(stress_value, weights["Stress"])
+                aqi_score = compute_aqi_score(aqi_pm25, weights["AQI"])
+                uv_score = compute_uv_score(uv_index, weights["UV"])
+                temperature_score = compute_temperature_score(temperature, weights["Temperature"])
+                humidity_score = compute_humidity_score(humidity, weights["Humidity"])
+                risk_score = compute_risk_score(disease, temperature, humidity, uv_index, aqi_pm25, stress_value)
 
             rows.append({
                 "Split": split,
@@ -601,9 +592,6 @@ def generate_dataset(dataset_dir: Path, profiles_per_image: int, seed: int) -> p
                 "UV_Score": uv_score,
                 "Temperature_Score": temperature_score,
                 "Humidity_Score": humidity_score,
-                "Lifestyle_Score": lifestyle_score,
-                "Environmental_Score": environmental_score,
-                "Disease_Multiplier": disease_multiplier,
                 "Risk_Score": risk_score,                       # continuous, unrounded, 0-100 — MLP training target
                 "Risk_Score_Display": round_half_up(risk_score),  # rounded, UI display only
             })
