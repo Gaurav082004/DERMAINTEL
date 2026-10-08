@@ -20,6 +20,12 @@
 //      into { success, data: {...} } for React
 //   4. Best-effort save to MongoDB (never blocks the response)
 //   5. Respond to React
+//
+// Authentication (signup/login/session/etc.) lives entirely in auth.js
+// and is mounted below. It does not touch the prediction flow above in
+// any way: /api/predict, /api/predictions, and /api/health remain
+// exactly as they were -- public, unauthenticated, unchanged responses.
+// See the note above the auth wiring below for why.
 
 const express = require('express');
 const cors = require('cors');
@@ -28,6 +34,7 @@ const axios = require('axios');
 const FormData = require('form-data');
 
 const db = require('./database');
+const auth = require('./auth');
 
 const app = express();
 
@@ -40,9 +47,36 @@ const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 // Matches app.py's _ALLOWED_IMAGE_CONTENT_TYPES exactly.
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png'];
 
+// Render (like most PaaS providers) terminates TLS and proxies requests
+// to this process through one reverse-proxy hop, setting X-Forwarded-For
+// /X-Forwarded-Proto. Trusting exactly that one hop (not an unbounded
+// chain -- that would let a client spoof their own X-Forwarded-For and
+// bypass rate limiting) is required for two things: auth.js's login/
+// signup rate limiter to key off the real client IP instead of
+// throwing/misbehaving on the proxy's IP, and for Express to correctly
+// recognize the connection as secure (relevant to secure cookies) when
+// TLS was terminated upstream. Harmless locally -- with no proxy in
+// front of a local dev server, there's no X-Forwarded-* header to trust
+// in the first place, so this is a no-op outside of Render.
+app.set('trust proxy', 1);
+
 // ---- Middleware ----
 app.use(cors({ origin: CLIENT_ORIGIN, methods: ['GET', 'POST'], credentials: true }));
 app.use(express.json());
+
+// Authentication layer (signup/login/logout/session/etc.) -- all route
+// logic lives in auth.js; this just mounts it. sessionMiddleware is
+// applied globally (harmless for routes that never read req.session)
+// so any route can check login state consistently without extra wiring.
+//
+// auth.requireAuth is applied directly on /api/predict and
+// /api/predictions below (route-level middleware, not here) -- both
+// now require a logged-in session. Everything about the prediction
+// logic itself (validation, the Flask call, response shape) is
+// unchanged; the only difference is an earlier 401 for logged-out
+// requests, same JSON error shape as every other validation failure.
+app.use(auth.sessionMiddleware);
+app.use('/api/auth', auth.router);
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -63,8 +97,8 @@ app.get('/api/health', (req, res) => {
 // =====================================================================
 // GET /api/predictions — returns [] instead of erroring if Mongo is down
 // =====================================================================
-app.get('/api/predictions', async (req, res) => {
-  const history = await db.getHistory();
+app.get('/api/predictions', auth.requireAuth, async (req, res) => {
+  const history = await db.getHistory(req.session.userId);
   res.json({ success: true, data: history, mongoConnected: db.isDatabaseConnected() });
 });
 
@@ -79,7 +113,7 @@ function isValidNumber(value) {
 // =====================================================================
 // POST /api/predict
 // =====================================================================
-app.post('/api/predict', upload.single('image'), async (req, res, next) => {
+app.post('/api/predict', auth.requireAuth, upload.single('image'), async (req, res, next) => {
   try {
     // ---- 1. Validate ----
     const { temperature, humidity, uv_index, aqi_pm25, stress } = req.body;
@@ -197,7 +231,10 @@ app.post('/api/predict', upload.single('image'), async (req, res, next) => {
     };
 
     // ---- 4. Best-effort save (never blocks the response) ----
-    db.savePrediction(normalized).catch(() => {});
+    // userId passed separately, not merged into `normalized` -- that
+    // object is also the exact response body returned below, and
+    // ownership must never leak into the API response shape.
+    db.savePrediction(normalized, req.session.userId).catch(() => {});
 
     // ---- 5. Respond to React ----
     return res.status(200).json({ success: true, data: normalized });

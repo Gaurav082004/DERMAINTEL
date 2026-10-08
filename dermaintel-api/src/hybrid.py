@@ -30,6 +30,20 @@ DECISION RULE (documented, deliberate, not a bug):
       condition. The external AI classification is the tie-breaker in
       this hybrid layer, by explicit design.
 
+GEMINI AVAILABILITY (confirmation layer, never a hard dependency):
+    The external AI provider is a CONFIRMATION layer only, never a
+    required one. If calling it or parsing its response fails for any
+    reason -- missing/invalid API key or model config, network error,
+    timeout, rate limiting, quota exhaustion, a malformed or empty
+    response, or any other provider-side failure -- predict() silently
+    falls back to the CNN's own prediction untouched (final_condition =
+    cnn_label, confidence = the CNN's own reported confidence) and
+    completes normally. The failure is logged server-side for
+    debugging, but predict()'s return shape is IDENTICAL either way:
+    callers (and the API response) never learn whether the AI provider
+    was consulted, agreed, disagreed, or failed. See predict()'s
+    docstring for the exact mechanism.
+
 This module intentionally does NOT:
     - Load or run the CNN model (see src/cnn_engine.py).
     - Load or run the MLP model (see src/mlp_engine.py).
@@ -484,6 +498,23 @@ def predict(
           AI provider's condition (it is the tie-breaker in this hybrid
           layer, by deliberate design).
 
+    GEMINI AVAILABILITY (confirmation layer, never required): if calling
+    the AI provider or parsing its response fails for ANY reason --
+    missing/invalid configuration, network error, timeout, rate limiting,
+    quota exhaustion, a malformed/empty response, or any other
+    provider-side failure -- this function silently falls back to the
+    CNN's own prediction (final_condition = cnn_label, confidence =
+    cnn_confidence, unmodified) and returns normally, exactly as if the
+    AI provider had agreed with the CNN. The failure is logged
+    server-side (see logger.warning below) for debugging, but is NEVER
+    raised, returned, or otherwise exposed to the caller -- the return
+    shape is identical whether the AI provider succeeded, failed, or was
+    never reachable at all. This only applies to the AI-provider call and
+    response parsing specifically; cnn_prediction itself (the CNN's own
+    output) is still validated strictly and still raises ValueError if
+    malformed, since that is a different, legitimate failure mode
+    unrelated to the AI provider's availability.
+
     Args:
         image_bytes: The ORIGINAL uploaded image bytes (not the
             preprocessed 224x224 CNN tensor).
@@ -499,16 +530,17 @@ def predict(
             "condition": str,    # one of ALLOWED_CLASSES
             "confidence": float, # application-level decision confidence,
                                   # NOT a clinical probability - see
-                                  # _compute_confidence().
+                                  # _compute_confidence(). Falls back to
+                                  # the CNN's own confidence, unmodified,
+                                  # whenever the AI provider could not be
+                                  # consulted.
         }
 
     Raises:
-        ValueError: If image_bytes is empty, cnn_prediction is malformed
-            (including an invalid confidence value), or the AI provider's
-            response cannot be parsed into a valid class.
-        RuntimeError: If AI_API_KEY or AI_MODEL is missing, the AI
-            provider request fails, or the SDK returns an unexpected
-            response structure.
+        ValueError: If image_bytes is empty or cnn_prediction is
+            malformed (including an invalid confidence value) -- these
+            are CNN-side/input problems, not AI-provider availability,
+            and are never silently swallowed.
     """
     total_start = time.perf_counter()
 
@@ -517,15 +549,33 @@ def predict(
     cnn_confidence = _extract_cnn_confidence(cnn_prediction)
     resolved_mime_type = _resolve_mime_type(mime_type)
 
-    raw_ai_text = _call_ai_provider(image_bytes, resolved_mime_type)
-    ai_label = _parse_ai_condition(raw_ai_text)
+    try:
+        raw_ai_text = _call_ai_provider(image_bytes, resolved_mime_type)
+        ai_label = _parse_ai_condition(raw_ai_text)
+    except Exception as exc:  # noqa: BLE001 - deliberately broad, see
+        # GEMINI AVAILABILITY above: the AI provider is a confirmation
+        # layer only, never a required dependency. Any failure here
+        # (missing config, network/timeout, rate limit, quota, malformed
+        # response, or anything else) falls back to the CNN's own
+        # result and the request completes normally -- it is logged for
+        # debugging but never raised, returned, or otherwise exposed.
+        logger.warning(
+            "hybrid.predict(): AI provider unavailable, falling back to "
+            "CNN-only prediction (cnn=%s). Reason: %s",
+            cnn_label,
+            exc,
+        )
+        ai_label = None
 
-    if cnn_label == ai_label:
+    if ai_label is None:
         final_condition = cnn_label
+        confidence = cnn_confidence
+    elif cnn_label == ai_label:
+        final_condition = cnn_label
+        confidence = _compute_confidence(cnn_label, ai_label, cnn_confidence)
     else:
         final_condition = ai_label
-
-    confidence = _compute_confidence(cnn_label, ai_label, cnn_confidence)
+        confidence = _compute_confidence(cnn_label, ai_label, cnn_confidence)
 
     total_elapsed_ms = (time.perf_counter() - total_start) * 1000
     logger.info(
@@ -533,7 +583,7 @@ def predict(
         "(cnn=%s, ai=%s, final=%s).",
         total_elapsed_ms,
         cnn_label,
-        ai_label,
+        ai_label if ai_label is not None else "unavailable",
         final_condition,
     )
 

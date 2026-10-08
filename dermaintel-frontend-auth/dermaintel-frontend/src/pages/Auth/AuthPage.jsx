@@ -1,41 +1,40 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import Container from '../../components/layout/Container';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import PasswordInput from '../../components/ui/PasswordInput';
-import Checkbox from '../../components/ui/Checkbox';
-import Badge from '../../components/ui/Badge';
 import { IconMail, IconLock } from '../../components/ui/icons';
 import { useAuth } from '../../context/AuthContext';
+import { getGoogleLoginUrl, ApiError } from '../../api/client';
 import './AuthPage.css';
 
-const DEMO_EMAIL = 'demo@dermaintel.app';
-
 /**
- * AuthPage — MOCK / DEMO ONLY.
+ * AuthPage — real authentication.
  *
  * Handles both the "login" and "signup" routes with one shared card
- * and an internal toggle, matching the reference screenshot. There is
- * no backend: submitting either form just validates the fields in the
- * browser and, if valid, records a local demo session via
- * AuthContext, then redirects to the Dashboard.
+ * and an internal toggle. Submits to the real backend via AuthContext
+ * (signup/login), which calls Express and establishes a real session
+ * cookie -- no password is ever stored client-side beyond the lifetime
+ * of this form's local state.
  *
  * `mode` prop: 'login' | 'signup' — sets which tab is active first;
  * the in-page toggle can still switch it, keeping the URL in sync.
  */
 export default function AuthPage({ mode: initialMode = 'login' }) {
   const [mode, setMode] = useState(initialMode);
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [remember, setRemember] = useState(true);
   const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
 
-  const { login } = useAuth();
+  const { signup, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   // Keep local mode in sync if the user arrives via a direct route
   // change (e.g. clicking "Log In" vs "Sign Up" in the Navbar).
@@ -43,6 +42,27 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
     setMode(initialMode);
     setErrors({});
   }, [initialMode]);
+
+  // Google Sign-In redirects back here with ?error=<code> on failure
+  // (it's a full-page browser redirect, not a fetch call, so the
+  // backend can't hand back a normal JSON error -- this is how it
+  // communicates failure instead). Shown once, then stripped from the
+  // URL so refreshing the page doesn't keep re-showing a stale error.
+  useEffect(() => {
+    const code = searchParams.get('error');
+    if (!code) return;
+
+    const messages = {
+      google_not_configured: 'Google Sign-In is not available right now.',
+      google_auth_failed: 'Google Sign-In did not complete. Please try again.',
+      google_email_unverified:
+        "That Google account's email address isn't verified. Log in with your password instead, or verify your Google account and try again.",
+      service_unavailable: 'Our authentication service is temporarily unavailable. Please try again shortly.',
+    };
+    setErrors({ form: messages[code] || 'Google Sign-In did not complete. Please try again.' });
+    navigate(location.pathname, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   function switchMode(nextMode) {
     setMode(nextMode);
@@ -52,6 +72,10 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
 
   function validate() {
     const nextErrors = {};
+
+    if (mode === 'signup' && !name.trim()) {
+      nextErrors.name = 'Name is required.';
+    }
 
     if (!email.trim()) {
       nextErrors.email = 'Email is required.';
@@ -77,20 +101,26 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
     return Object.keys(nextErrors).length === 0;
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
     if (!validate()) return;
 
-    // Mock login/signup: no request is sent anywhere, and the
-    // password itself is never passed to login() or stored.
-    login({ email: email.trim(), remember });
-    const redirectTo = location.state?.from || '/';
-    navigate(redirectTo, { replace: true });
-  }
-
-  function handleDemoLogin() {
-    login({ email: DEMO_EMAIL, remember: true });
-    navigate('/', { replace: true });
+    setSubmitting(true);
+    try {
+      if (mode === 'signup') {
+        await signup({ name: name.trim(), email: email.trim(), password });
+      } else {
+        await login({ email: email.trim(), password });
+      }
+      const redirectTo = location.state?.from || '/';
+      navigate(redirectTo, { replace: true });
+    } catch (err) {
+      setErrors({
+        form: err instanceof ApiError ? err.message : 'Something went wrong. Please try again.',
+      });
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const isSignup = mode === 'signup';
@@ -105,9 +135,6 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
           <h1 className="auth-card__title">
             {isSignup ? 'Create your DERMAINTEL account' : 'Log in to DERMAINTEL'}
           </h1>
-          <p className="auth-card__subtitle">
-            Frontend demo authentication — no data leaves your browser.
-          </p>
         </div>
 
         <div className="auth-card__toggle" role="group" aria-label="Choose login or signup">
@@ -130,6 +157,24 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
         </div>
 
         <form className="auth-card__form" onSubmit={handleSubmit} noValidate>
+          {errors.form ? (
+            <p className="auth-card__subtitle" role="alert">
+              {errors.form}
+            </p>
+          ) : null}
+
+          {isSignup ? (
+            <Input
+              label="Full name"
+              type="text"
+              placeholder="Your name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              error={errors.name}
+              autoComplete="name"
+            />
+          ) : null}
+
           <Input
             label="Email address"
             type="email"
@@ -163,26 +208,23 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
             />
           ) : null}
 
-          <div className="auth-card__row">
-            <Checkbox
-              label="Remember this session"
-              checked={remember}
-              onChange={(event) => setRemember(event.target.checked)}
-            />
-          </div>
+          {!isSignup ? (
+            <div className="auth-card__row">
+              <Link to="/forgot-password" className="auth-card__footer-link">
+                Forgot password?
+              </Link>
+            </div>
+          ) : null}
 
-          <Button type="submit" variant="primary" size="lg" fullWidth>
-            {isSignup ? 'Create Account' : 'Log In to Dashboard'}
+          <Button type="submit" variant="primary" size="lg" fullWidth disabled={submitting}>
+            {submitting ? 'Please wait…' : isSignup ? 'Create Account' : 'Log In to Dashboard'}
           </Button>
         </form>
 
         <div className="auth-card__demo">
-          <Button type="button" variant="secondary" size="md" fullWidth onClick={handleDemoLogin}>
-            1-Click Demo Login
+          <Button as="a" href={getGoogleLoginUrl()} variant="secondary" size="md" fullWidth>
+            Continue with Google
           </Button>
-          <Badge tone="info" className="auth-card__demo-badge">
-            DEMO DATA
-          </Badge>
         </div>
 
         <p className="auth-card__footer">
