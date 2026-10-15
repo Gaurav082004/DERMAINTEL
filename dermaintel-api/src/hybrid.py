@@ -1,90 +1,3 @@
-"""
-DERMAINTEL API - Hybrid CNN/AI Classification Layer
-=======================================================
-
-This module is a comparison layer between:
-    1. The existing local CNN prediction (src/cnn_engine.py) - UNCHANGED,
-       never reimplemented or duplicated here.
-    2. An independent image classification from a configured external AI
-       provider.
-
-This module does NOT run CNN inference itself. It receives the ORIGINAL
-uploaded image bytes and the already-computed CNN prediction dict, sends
-the same original image to the configured AI provider for an independent
-classification, and applies a documented decision rule to select a final
-condition.
-
-The AI provider and model are fully configurable via environment
-variables - nothing about the provider or model is hard-coded in this
-file. See "Configuration" below.
-
-This module is intentionally NOT wired into app.py yet. It is a
-standalone, reusable function a future version of app.py could call as:
-
-    hybrid_result = hybrid.predict(image_bytes, cnn_prediction)
-
-DECISION RULE (documented, deliberate, not a bug):
-    - If the CNN's predicted_label matches the AI provider's returned
-      condition, the final condition is that shared condition.
-    - If they disagree, the final condition is the AI provider's
-      condition. The external AI classification is the tie-breaker in
-      this hybrid layer, by explicit design.
-
-GEMINI AVAILABILITY (confirmation layer, never a hard dependency):
-    The external AI provider is a CONFIRMATION layer only, never a
-    required one. If calling it or parsing its response fails for any
-    reason -- missing/invalid API key or model config, network error,
-    timeout, rate limiting, quota exhaustion, a malformed or empty
-    response, or any other provider-side failure -- predict() silently
-    falls back to the CNN's own prediction untouched (final_condition =
-    cnn_label, confidence = the CNN's own reported confidence) and
-    completes normally. The failure is logged server-side for
-    debugging, but predict()'s return shape is IDENTICAL either way:
-    callers (and the API response) never learn whether the AI provider
-    was consulted, agreed, disagreed, or failed. See predict()'s
-    docstring for the exact mechanism.
-
-This module intentionally does NOT:
-    - Load or run the CNN model (see src/cnn_engine.py).
-    - Load or run the MLP model (see src/mlp_engine.py).
-    - Compute risk tiers or recommendations (see src/risk_mapper.py).
-    - Implement Grad-CAM.
-    - Handle environmental/lifestyle variables or stress.
-    - Touch MongoDB.
-    - Define any Flask route.
-    - Read files from disk or depend on a Flask request object.
-
-CONFIGURATION:
-    AI_API_KEY - required. API key for the configured external AI
-        provider. Never hard-coded, never logged, never included in any
-        exception message.
-    AI_MODEL - required. The model identifier to use with the configured
-        AI provider. Never hard-coded.
-
-CONFIDENCE DISCLAIMER:
-    The external AI provider is not asked for, and does not return, a
-    clinical probability. The "confidence" value returned by predict() is
-    an APPLICATION-LEVEL DECISION CONFIDENCE describing agreement between
-    the two independent classifiers, optionally informed by the CNN's own
-    softmax confidence. It is NOT a medical/clinical probability of any
-    kind. See _compute_confidence() for the exact, documented formula.
-
-PERFORMANCE NOTES:
-    - The GenAI client is created lazily on first use and cached at
-      module level for the lifetime of the process, so subsequent calls
-      to predict() reuse the same client (and its underlying HTTP
-      connection) instead of paying for client construction / a fresh
-      handshake on every request. See _get_client().
-    - The classification prompt is deliberately minimal. The structured
-      `response_format` (an enum-constrained object) already mechanically
-      prevents free-text explanations, multiple diagnoses, or markdown
-      wrapping, so the prompt only needs to state the decision-relevant
-      instructions (four classes, pick exactly one, guess if uncertain)
-      rather than separately guarding against outputs the schema already
-      makes impossible. This reduces input tokens the model has to
-      process per request.
-"""
-
 import base64
 import json
 import logging
@@ -102,28 +15,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 ALLOWED_CLASSES = ("Acne", "Alopecia", "Eczema", "Healthy")
-
-# Environment variable names for the external AI provider. Never
-# hard-coded - both the key and the model are supplied at runtime.
 _AI_API_KEY_ENV_VAR = "AI_API_KEY"
 _AI_MODEL_ENV_VAR = "AI_MODEL"
-
-# Accepted MIME types for the original uploaded image, matching the
-# existing app.py's own allowed image content types.
 _ALLOWED_MIME_TYPES = ("image/jpeg", "image/jpg", "image/png")
 _DEFAULT_MIME_TYPE = "image/jpeg"
-
-# Deliberately minimal. The structured response_format below already
-# mechanically enforces exactly-one-of-four-classes JSON output, so this
-# prompt only carries the decision-relevant instructions - not repeated
-# guardrails against outputs the schema already makes impossible.
 _AI_PROMPT = """Classify this skin image as exactly one of: Acne, Alopecia, Eczema, Healthy.
 If uncertain, still choose the single closest class."""
-
-
-# ---------------------------------------------------------------------------
-# Cached GenAI client (see PERFORMANCE NOTES above)
-# ---------------------------------------------------------------------------
 
 _cached_client = None
 _client_init_lock = threading.Lock()
@@ -552,13 +449,6 @@ def predict(
     try:
         raw_ai_text = _call_ai_provider(image_bytes, resolved_mime_type)
         ai_label = _parse_ai_condition(raw_ai_text)
-    except Exception as exc:  # noqa: BLE001 - deliberately broad, see
-        # GEMINI AVAILABILITY above: the AI provider is a confirmation
-        # layer only, never a required dependency. Any failure here
-        # (missing config, network/timeout, rate limit, quota, malformed
-        # response, or anything else) falls back to the CNN's own
-        # result and the request completes normally -- it is logged for
-        # debugging but never raised, returned, or otherwise exposed.
         logger.warning(
             "hybrid.predict(): AI provider unavailable, falling back to "
             "CNN-only prediction (cnn=%s). Reason: %s",
