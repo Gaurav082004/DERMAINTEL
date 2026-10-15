@@ -259,3 +259,5 @@ docker-compose.override.yml
 # DERMAINTEL generated artifacts
 dermaintel-api/artifacts/
 dermaintel-ml/outputs/
+
+express-backend/backend/.env.example
