@@ -22,6 +22,24 @@ _DEFAULT_MIME_TYPE = "image/jpeg"
 _AI_PROMPT = """Classify this skin image as exactly one of: Acne, Alopecia, Eczema, Healthy.
 If uncertain, still choose the single closest class."""
 
+# Per-request timeout, in SECONDS, passed to the SDK's
+# client.interactions.create(timeout=...). Verified against the installed
+# google-genai SDK: it is applied by httpx to the connect/read/write/pool
+# phases of EACH HTTP attempt. It is NOT a hard wall-clock deadline for the
+# whole call.
+_AI_TIMEOUT_SECONDS = 60
+
+# SDK-internal retry policy. By default the SDK retried 408/409/429/5xx with
+# backoff (~95 s total on quota errors), delaying the CNN fallback past the
+# caller's 30 s timeout. Verified against google-genai 2.31.0:
+# HttpOptions(retry_options=HttpRetryOptions(attempts=N, http_status_codes=[...]))
+# is honored by interactions.create; `attempts` is normalized to >= 1 (so 0
+# cannot disable retries), but `http_status_codes` overrides the retryable set.
+# We keep a single retry for transient errors and EXCLUDE 429, so quota
+# exhaustion raises immediately and falls back to the CNN result.
+_AI_SDK_RETRY_ATTEMPTS = 1
+_AI_SDK_RETRY_STATUS_CODES = (408, 409, 500, 502, 503, 504)  # no 429
+
 _cached_client = None
 _client_init_lock = threading.Lock()
 
@@ -44,6 +62,7 @@ def _get_client(api_key: str):
         if _cached_client is None:
             try:
                 from google import genai
+                from google.genai import types as genai_types
             except ImportError as exc:
                 raise RuntimeError(
                     "hybrid.predict() requires the AI provider SDK package, "
@@ -51,7 +70,15 @@ def _get_client(api_key: str):
                 ) from exc
 
             init_start = time.perf_counter()
-            _cached_client = genai.Client(api_key=api_key)
+            _cached_client = genai.Client(
+                api_key=api_key,
+                http_options=genai_types.HttpOptions(
+                    retry_options=genai_types.HttpRetryOptions(
+                        attempts=_AI_SDK_RETRY_ATTEMPTS,
+                        http_status_codes=list(_AI_SDK_RETRY_STATUS_CODES),
+                    )
+                ),
+            )
             init_elapsed_ms = (time.perf_counter() - init_start) * 1000
             logger.info(
                 "hybrid.predict(): GenAI client initialized (%.1f ms) - "
@@ -294,6 +321,7 @@ def _call_ai_provider(image_bytes: bytes, mime_type: str) -> str:
                 },
                 "required": ["condition"],
             },
+            timeout=_AI_TIMEOUT_SECONDS,
         )
     except Exception:
         logger.exception(
@@ -449,10 +477,16 @@ def predict(
     try:
         raw_ai_text = _call_ai_provider(image_bytes, resolved_mime_type)
         ai_label = _parse_ai_condition(raw_ai_text)
+    except Exception as exc:  # noqa: BLE001 - the AI provider is a
+        # confirmation layer only, never a required dependency: any
+        # failure of the call OR of parsing its response falls back to
+        # the CNN result below. Only the exception's type and message
+        # are logged (never the API key or any request headers).
         logger.warning(
             "hybrid.predict(): AI provider unavailable, falling back to "
-            "CNN-only prediction (cnn=%s). Reason: %s",
+            "CNN-only prediction (cnn=%s). Reason: %s: %s",
             cnn_label,
+            type(exc).__name__,
             exc,
         )
         ai_label = None
