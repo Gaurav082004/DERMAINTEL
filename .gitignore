@@ -45,7 +45,7 @@ processed_data/
 outputs/
 plots/
 figures/
-results/
+/results/
 
 # Uploaded user images (if stored locally during dev)
 uploads/
