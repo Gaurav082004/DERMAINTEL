@@ -11,7 +11,7 @@ import './Processing.css';
 
 // Comfortably above Express's own FLASK_TIMEOUT_MS (30s default) so a
 // real slow-but-successful inference isn't cut off client-side first.
-const REQUEST_TIMEOUT_MS = 45000;
+const REQUEST_TIMEOUT_MS = 105000;
 
 // Neutral, frontend-only progress messages. These are UI reassurance
 // text, NOT real backend events — the frontend has no visibility into

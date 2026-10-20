@@ -41,7 +41,7 @@ const app = express();
 // ---- Config ----
 const FLASK_URL = process.env.FLASK_URL || 'http://127.0.0.1:5000';
 const FLASK_PREDICT_PATH = process.env.FLASK_PREDICT_PATH || '/predict';
-const FLASK_TIMEOUT_MS = Number(process.env.FLASK_TIMEOUT_MS) || 30000;
+const FLASK_TIMEOUT_MS = Number(process.env.FLASK_TIMEOUT_MS) || 90000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 
 // Matches app.py's _ALLOWED_IMAGE_CONTENT_TYPES exactly.
