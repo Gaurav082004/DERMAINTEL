@@ -36,7 +36,7 @@ checkpoints/
 *.db
 
 # Dataset folders
-data/
+/data/
 datasets/
 raw_data/
 processed_data/
